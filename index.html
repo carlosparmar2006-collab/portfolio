@@ -109,70 +109,62 @@ footer{padding:26px 0 46px;border-top:1px solid var(--line);font-size:14px;color
 
 <section>
   <h2>Proyectos</h2>
+  <p class="muted">Del primero al más reciente. Cada uno salió mejor que el anterior porque se arrastraban los errores ya apuntados.</p>
 
   <div class="proj">
-    <div class="top"><h3>Programas para la HP Prime</h3><span class="estado">terminados · se usan en los exámenes</span></div>
-    <p>Apps TERMO, ELECTRO y RESOLVER: tablas de vapor y refrigerantes, compresibilidad, ciclos de potencia, circuitos, trifásica y un resolvedor de ecuaciones. Además del resultado, muestran los pasos.</p>
-    <div class="fotos">
-      <figure><img src="fotos/prime_sat.png" alt="Tabla de saturación en la calculadora"><figcaption>Propiedades del agua</figcaption></figure>
-      <figure><img src="fotos/prime_pasos.png" alt="Pasos del método de nudos"><figcaption>Método de nudos, paso a paso</figcaption></figure>
-      <figure><img src="fotos/prime_thev.png" alt="Equivalente de Thévenin"><figcaption>Thévenin y potencia máxima</figcaption></figure>
-    </div>
-    <h4>Qué se cambió por el camino</h4>
-    <ul>
-      <li>Linter propio para lo que la calculadora no avisa bien (nombres reservados como <code>e</code> o <code>i</code>, <code>LOCAL</code> de más de 8 variables).</li>
-      <li>Orden fijo de comprobación: construir → linter → pruebas de estrés → recorrer todas las pantallas → emulador.</li>
-      <li>Pruebas en un emulador aparte y en segundo plano, sin tocar la pantalla de Carlos.</li>
-      <li>Más de 50 fallos apuntados, cada uno con la regla que dejó. Varios los encontró un compañero probando casos límite.</li>
-    </ul>
-    <p class="tech">HP PPL · Python</p>
+    <div class="top"><h3>1 · Jarvis</h3><span class="estado">julio 2026 · el primero</span></div>
+    <p>Asistente de voz para el ordenador, hecho sobre todo para aprender y ver hasta dónde llegaban la tarjeta gráfica y los modelos locales. Sin experiencia previa: muchos errores, mucho código tirado y la mayoría de las reglas que se usan ahora salieron de aquí.</p>
+    <p class="tech">Python · Whisper · modelos locales (Ollama)</p>
   </div>
 
   <div class="proj">
-    <div class="top"><h3>La carrera (Termodinámica y el resto)</h3><span class="estado">en uso diario</span></div>
-    <p>El material de las seis asignaturas, ordenado para que Claude haga de profesor: repasos de cada clase a partir de los apuntes, ejercicios resueltos con el método de la asignatura y formularios para los exámenes.</p>
-    <div class="fotos">
-      <figure><img src="fotos/folio_1.png" alt="Formulario de Termodinámica, cara 1"><figcaption>Formulario de Termo para el examen, cara 1</figcaption></figure>
-      <figure><img src="fotos/folio_2.png" alt="Formulario de Termodinámica, cara 2"><figcaption>Cara 2: ciclos con sus esquemas</figcaption></figure>
-      <figure><img src="fotos/resuelto_1.png" alt="Documento de ejercicios resueltos"><figcaption>Ejercicios resueltos, Tema 4</figcaption></figure>
-    </div>
-    <h4>Qué se cambió por el camino</h4>
-    <ul>
-      <li>Al principio se daban fórmulas por sabidas. Ahora cada una lleva de dónde sale.</li>
-      <li>Cada solución cita el método de la asignatura y va debajo de su enunciado, no al final.</li>
-      <li>Los números de estado y las figuras se copian del material del profesor, no se inventan.</li>
-      <li>Los esquemas del formulario se dibujan por código y se revisan como imagen hasta que caben.</li>
-    </ul>
-    <p class="tech">Claude Code · skills · Python · HTML a PDF</p>
-  </div>
-
-  <div class="proj">
-    <div class="top"><h3>App del gimnasio</h3><span class="estado">en pausa desde septiembre · v0.37</span></div>
-    <p>Para apuntar el peso de cada máquina y ver si se progresa o no. Luego se añadieron nutrición, planificador, mapa de gimnasios y cuentas en la nube. 37 versiones entre julio y septiembre.</p>
+    <div class="top"><h3>2 · App del gimnasio</h3><span class="estado">julio–septiembre 2026 · en pausa · v0.37</span></div>
+    <p>Para apuntar el peso de cada máquina y ver si se progresa o no. Luego se añadieron nutrición, planificador, mapa de gimnasios y cuentas en la nube. 37 versiones, cada una a partir de usarla de verdad en el gimnasio.</p>
     <div class="fotos">
       <figure><img src="fotos/gym_hoy.png" alt="Pantalla de inicio"><figcaption>Inicio (v0.37)</figcaption></figure>
       <figure><img src="fotos/gym_panel.png" alt="Gráficas de progreso"><figcaption>Progreso, con datos de prueba</figcaption></figure>
     </div>
     <p><a href="demo-gym/" target="_blank" rel="noopener">Abrir la app en el navegador</a> <span class="muted">(empieza vacía)</span></p>
-    <h4>Qué se cambió por el camino</h4>
     <ul>
-      <li>Un fallo del buscador volvía en cada versión. Se resolvió dejando de parchearlo y probándolo fuera de la app.</li>
-      <li>De los datos de ejercicios de un repositorio se usaron los textos (licencia MIT), no las animaciones (con copyright).</li>
-      <li>Pausada al empezar el curso. Queda unir la última rama con la principal.</li>
+      <li>Un fallo del buscador volvía en cada versión; se resolvió cambiando de enfoque y probándolo fuera de la app.</li>
+      <li>Revisión de licencias antes de usar datos de terceros.</li>
+      <li>Pausada al empezar el curso.</li>
     </ul>
     <p class="tech">JavaScript · Android · Supabase · Cloudflare</p>
   </div>
 
   <div class="proj">
-    <div class="top"><h3>Jarvis</h3><span class="estado">primer proyecto · a ratos</span></div>
-    <p>Asistente de voz para el ordenador. Fue el primero y de él salieron casi todas las reglas de arriba.</p>
-    <div class="fotos"><figure><img src="fotos/jarvis.png" alt="Lista de funciones de Jarvis"><figcaption>Lista de funciones</figcaption></figure></div>
-    <h4>Qué se cambió por el camino</h4>
+    <div class="top"><h3>3 · La carrera</h3><span class="estado">septiembre 2026 · en uso diario</span></div>
+    <p>Claude tiene acceso configurado a Atenea (el campus virtual) y descarga y ordena el material de las seis asignaturas. El login y el 2FA los pone siempre Carlos. Con eso delante hace de profesor: repasos de cada clase a partir de los apuntes de la tablet, ejercicios resueltos con el método de la asignatura y formularios para los exámenes.</p>
+<div class="arbol">Asignaturas/240053_ELECTRO_Electrotecnia/
+├── 00_Guia/
+├── 01_Teoria/               <span class="c"># por temas, como en Atenea</span>
+├── 02_Problemas/
+├── 03_Examenes/             <span class="c"># por curso y cuatrimestre</span>
+├── 05_Tablas_y_Formularios/
+└── 07_Mis_Apuntes/
+    ├── Notas de clase/      <span class="c"># exportadas de Samsung Notes</span>
+    ├── Repasos/
+    └── Ejercicios resueltos/</div>
+    <div class="fotos">
+      <figure class="ancha" style="max-width:640px"><img src="fotos/electro.png" alt="Fragmento de ejercicios resueltos de Electrotecnia"><figcaption>Electrotecnia: trifásica resuelta paso a paso, citando la diapositiva de cada fórmula</figcaption></figure>
+      <figure><img src="fotos/folio_1.png" alt="Formulario de Termodinámica"><figcaption>Formulario de Termo para el examen</figcaption></figure>
+    </div>
+    <p class="tech">Claude Code · skills · Python · HTML a PDF</p>
+  </div>
+
+  <div class="proj">
+    <div class="top"><h3>4 · Apps para la calculadora HP Prime</h3><span class="estado">octubre–noviembre 2026 · se usan en los exámenes</span></div>
+    <p>TERMO, ELECTRO y RESOLVER, hechas entre Carlos y la IA: tablas de vapor, circuitos, trifásica y un resolvedor de ecuaciones, con los pasos además del resultado.</p>
     <ul>
-      <li>Con unas 60 herramientas, el modelo local pequeño elegía mal. Se redujeron a las necesarias.</li>
-      <li>Muchas funciones a la vez acababan en arreglos casi diarios. De ahí el changelog y el registro de errores.</li>
+      <li>Las pruebas se hacen en un escritorio virtual aparte, con un emulador propio, para no interferir con el ratón ni la pantalla de Carlos.</li>
+      <li>Cada fallo encontrado se apunta y se convierte en una comprobación automática antes de entregar.</li>
     </ul>
-    <p class="tech">Python · Whisper · Claude + modelos locales</p>
+    <div class="fotos">
+      <figure><img src="fotos/prime_sat.png" alt="Tabla de saturación en la calculadora"><figcaption>Propiedades del agua</figcaption></figure>
+      <figure><img src="fotos/prime_pasos.png" alt="Pasos del método de nudos"><figcaption>Método de nudos, paso a paso</figcaption></figure>
+    </div>
+    <p class="tech">HP PPL · Python</p>
   </div>
 </section>
 
