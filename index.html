@@ -4,38 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Carlos · Proyectos con IA</title>
-<meta name="description" content="Lo que he hecho con Claude desde julio de 2026 y cómo trabajo con él.">
+<meta name="description" content="Proyectos hechos con Claude desde julio de 2026 y cómo se trabaja con él.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#fafaf8;--card:#fff;--text:#222;--muted:#666;--line:#e6e4df;--link:#2b5fb4}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161616;--card:#1f1f1f;--text:#e8e8e6;--muted:#9d9d99;--line:#333;--link:#8ab4f8}}
-:root[data-theme="dark"]{--bg:#161616;--card:#1f1f1f;--text:#e8e8e6;--muted:#9d9d99;--line:#333;--link:#8ab4f8}
+:root{--bg:#fafaf8;--card:#fff;--text:#222;--muted:#666;--line:#e6e4df;--soft:#f1f0ec;--link:#2b5fb4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161616;--card:#1f1f1f;--text:#e8e8e6;--muted:#9d9d99;--line:#333;--soft:#262626;--link:#8ab4f8}}
+:root[data-theme="dark"]{--bg:#161616;--card:#1f1f1f;--text:#e8e8e6;--muted:#9d9d99;--line:#333;--soft:#262626;--link:#8ab4f8}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,sans-serif}
-.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+.wrap{max-width:860px;margin:0 auto;padding:0 16px}
 a{color:var(--link)}
-header{padding:56px 0 24px}
-h1{font-size:28px;font-weight:600;margin:0 0 10px}
-h2{font-size:20px;font-weight:600;margin:0 0 14px}
+header{padding:52px 0 20px}
+h1{font-size:28px;font-weight:600;margin:0 0 8px}
+h2{font-size:20px;font-weight:600;margin:0 0 6px}
 h3{font-size:18px;font-weight:600;margin:0}
+h4{font-size:14px;font-weight:600;margin:14px 0 6px}
 p{margin:0 0 10px}
 .muted{color:var(--muted)}
-section{padding:32px 0;border-top:1px solid var(--line)}
+section{padding:30px 0;border-top:1px solid var(--line)}
 ul{padding-left:20px;margin:0}
-li{margin-bottom:6px}
+li{margin-bottom:5px}
+code{font-family:'JetBrains Mono',monospace;font-size:.85em;background:var(--soft);padding:1px 5px;border-radius:4px}
+/* esquema */
+.flujo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 6px}
+.paso{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:14px}
+.paso b{display:block;font-size:13px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.paso ul{padding-left:16px}
+@media (max-width:700px){.flujo{grid-template-columns:1fr 1fr}}
+.arbol{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;white-space:pre;overflow-x:auto;margin:10px 0}
+.arbol .c{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--card);border:1px solid var(--line);margin:10px 0}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--soft);font-weight:600;font-size:13px}
+.tw{overflow-x:auto}
+/* proyectos */
 .proj{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
-.top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
 .estado{font-size:13px;color:var(--muted)}
-.fotos{display:flex;gap:10px;overflow-x:auto;margin:14px 0}
-.fotos img{height:300px;width:auto;border-radius:8px;border:1px solid var(--line);flex:none}
-.fotos img.ancha{height:auto;width:100%;max-height:none}
-.proj h4{font-size:14px;font-weight:600;margin:14px 0 6px}
+.fotos{display:flex;gap:10px;overflow-x:auto;margin:14px 0;padding-bottom:4px}
+.fotos figure{margin:0;flex:none}
+.fotos img{height:320px;width:auto;border-radius:8px;border:1px solid var(--line);display:block}
+.fotos figcaption{font-size:12px;color:var(--muted);margin-top:4px;max-width:300px}
+.ancha img{height:auto;width:100%}
 .proj ul{font-size:15px}
 .tech{font-size:13px;color:var(--muted);margin-top:12px}
-footer{padding:28px 0 48px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+footer{padding:26px 0 46px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
 .theme{position:fixed;top:12px;right:12px;background:var(--card);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:4px 9px;cursor:pointer;font:inherit;font-size:13px}
-@media (max-width:520px){.fotos img{height:240px}}
+@media (max-width:520px){.fotos img{height:250px}}
 </style>
 </head>
 <body>
@@ -44,19 +60,50 @@ footer{padding:28px 0 48px;border-top:1px solid var(--line);font-size:14px;color
 
 <header>
   <h1>Carlos · proyectos con IA</h1>
-  <p class="muted">Estudio Ingeniería en Tecnologías Industriales (GETI) en la ETSEIB. Desde julio de 2026 uso Claude casi cada día. Esto es lo que he hecho con él, cómo están las cosas y qué he aprendido por el camino.</p>
+  <p class="muted">Estudiante de GETI en la ETSEIB. Proyectos hechos con Claude (Claude Code) desde julio de 2026, cómo está organizado el trabajo y en qué punto está cada uno.</p>
 </header>
 
 <section>
-  <h2>Cómo trabajo</h2>
-  <p>Al principio le pedía cosas y ya. Con los meses he ido montando unas reglas para que no se le olvide todo entre sesiones y no repita los mismos fallos:</p>
+  <h2>Cómo se trabaja con Claude</h2>
+  <p class="muted">Un agente empieza cada sesión sin memoria. Esto es lo que se ha ido montando para que retome el trabajo, no repita errores y no haga cosas que no debe.</p>
+
+  <h4>Cada sesión</h4>
+  <div class="flujo">
+    <div class="paso"><b>1 · Arranque</b><ul><li>Lee las instrucciones comunes y las del proyecto</li><li>Lee solo el «estado actual» y la última entrada del log</li><li><code>git log</code> de los últimos 8 cambios</li></ul></div>
+    <div class="paso"><b>2 · Trabajo</b><ul><li>Busca lo concreto, no explora todo</li><li>Antes de tocar algo que ya falló, lee el registro de errores</li><li>Sigue las reglas del proyecto</li></ul></div>
+    <div class="paso"><b>3 · Verificación</b><ul><li>Prueba en la app real con datos reales</li><li>Tests, linter propio, emulador</li><li>PDF revisados como imagen</li></ul></div>
+    <div class="paso"><b>4 · Cierre</b><ul><li>Actualiza el estado (máx. 25 líneas)</li><li>Entrada en el log y error nuevo si lo hubo</li><li>Commit explicando qué cambió y qué se probó</li></ul></div>
+  </div>
+
+  <h4>Cómo están organizados los ficheros</h4>
+<div class="arbol">Documents/CLAUDE/
+├── CLAUDE.md              <span class="c"># reglas comunes a todos los proyectos</span>
+├── _claude/
+│   ├── PROYECTOS.md       <span class="c"># qué proyectos hay y en qué estado</span>
+│   ├── capacidades.md     <span class="c"># qué puede hacer Claude y qué no</span>
+│   ├── reglas/            <span class="c"># reglas por tema (interfaces, documentos, git…)</span>
+│   ├── plantilla/         <span class="c"># lo que recibe un proyecto nuevo</span>
+│   └── instalar_proyecto.py  <span class="c"># hook al abrir una carpeta nueva</span>
+└── &lt;proyecto&gt;/
+    ├── CLAUDE.md          <span class="c"># reglas propias del proyecto</span>
+    ├── MEMORIA.md         <span class="c"># estado actual y decisiones tomadas</span>
+    ├── CHANGELOG.md
+    ├── ops/logs/LOG.md    <span class="c"># qué se pidió y qué se hizo</span>
+    ├── ops/logs/ERRORES.md  <span class="c"># síntoma, causa, arreglo, prueba</span>
+    └── .claude/skills/    <span class="c"># tareas repetibles del proyecto</span></div>
+
+  <h4>Qué puede hacer y qué no</h4>
+  <div class="tw"><table>
+    <tr><th>Lo hace solo</th><th>Pregunta antes</th><th>No lo hace</th></tr>
+    <tr><td>Instalar, compilar, ejecutar y probar<br>Commits en cada cambio<br>Descargar material ya autorizado</td><td>Borrar algo que no ha mirado<br>Publicar o enviar algo<br>Usar subagentes u otro modelo</td><td>Contraseñas, códigos 2FA, datos bancarios<br>Crear cuentas<br>Gastos recurrentes</td></tr>
+  </table></div>
+
+  <h4>Otras piezas</h4>
   <ul>
-    <li>Un fichero de instrucciones común a todos mis proyectos, y uno propio en cada proyecto.</li>
-    <li>Al empezar, solo lee el estado del proyecto y los últimos cambios, no todo el código.</li>
-    <li>Cuando algo sale mal, se apunta qué pasó y por qué, y se convierte en una regla o un test.</li>
-    <li>Nada se da por terminado sin probarlo en la app de verdad.</li>
-    <li>Cada vez que toca algo, hace un commit explicando qué ha cambiado.</li>
-    <li>Para tareas largas y repetitivas uso Gemini, en una copia aparte del proyecto.</li>
+    <li><b>Memoria:</b> una nota por regla, con el motivo y cómo aplicarla. Unas 50 en el proyecto de la carrera.</li>
+    <li><b>Skills:</b> sincronizar el campus virtual, repasar la clase del día, formularios, repaso semanal, calendario, delegar en Gemini.</li>
+    <li><b>Gemini:</b> para tareas largas, en una copia aparte del proyecto y con un hook que le impide borrar.</li>
+    <li><b>Contexto:</b> herramientas y plugins desactivados en los proyectos donde no se usan.</li>
   </ul>
 </section>
 
@@ -64,57 +111,73 @@ footer{padding:28px 0 48px;border-top:1px solid var(--line);font-size:14px;color
   <h2>Proyectos</h2>
 
   <div class="proj">
-    <div class="top"><h3>App del gimnasio</h3><span class="estado">en pausa desde septiembre · v0.37</span></div>
-    <p>La hice porque se me olvidaba cuánto levantaba en cada máquina. Empezó siendo eso y fue creciendo: nutrición, planificador, mapa de gimnasios, cuentas y compartir con amigos.</p>
-    <div class="fotos" id="fotos-gym"><img src="fotos/gym_hoy.png" alt="Pantalla de bienvenida de la app del gimnasio"><img src="fotos/gym_panel.png" alt="Gráficas de progreso de la app del gimnasio"></div>
-    <p><a href="demo-gym/" target="_blank" rel="noopener">Probar la app en el navegador</a> <span class="muted">(empieza vacía)</span></p>
-    <h4>Lo que aprendí</h4>
+    <div class="top"><h3>Programas para la HP Prime</h3><span class="estado">terminados · se usan en los exámenes</span></div>
+    <p>Apps TERMO, ELECTRO y RESOLVER: tablas de vapor y refrigerantes, compresibilidad, ciclos de potencia, circuitos, trifásica y un resolvedor de ecuaciones. Además del resultado, muestran los pasos.</p>
+    <div class="fotos">
+      <figure><img src="fotos/prime_sat.png" alt="Tabla de saturación en la calculadora"><figcaption>Propiedades del agua</figcaption></figure>
+      <figure><img src="fotos/prime_pasos.png" alt="Pasos del método de nudos"><figcaption>Método de nudos, paso a paso</figcaption></figure>
+      <figure><img src="fotos/prime_thev.png" alt="Equivalente de Thévenin"><figcaption>Thévenin y potencia máxima</figcaption></figure>
+    </div>
+    <h4>Qué se cambió por el camino</h4>
     <ul>
-      <li>Hubo un fallo que volvía versión tras versión. Dejó de volver cuando paré de parchearlo y lo probamos fuera de la app.</li>
-      <li>Mirar las licencias: los datos de ejercicios se podían usar, las animaciones de ese mismo repositorio no.</li>
-    </ul>
-    <p class="tech">JavaScript · Android · Supabase · Cloudflare</p>
-  </div>
-
-  <div class="proj">
-    <div class="top"><h3>La carrera</h3><span class="estado">en uso cada día</span></div>
-    <p>Tengo el material de todas las asignaturas organizado para que Claude me haga de profesor: repasa lo de clase con mis apuntes, me resuelve ejercicios con el método de la asignatura y me hace los formularios para los exámenes.</p>
-    <div class="fotos"><img class="ancha" src="fotos/folio.png" alt="Trozo del formulario de Termodinámica"></div>
-    <h4>Lo que aprendí</h4>
-    <ul>
-      <li>Al principio daba por sabidas cosas que yo no recordaba. Ahora cada fórmula viene explicada.</li>
-      <li>Las soluciones tienen que seguir el método del profesor, no uno cualquiera que dé el mismo número.</li>
-    </ul>
-    <p class="tech">Claude Code · Python · PDF</p>
-  </div>
-
-  <div class="proj">
-    <div class="top"><h3>Programas para la calculadora</h3><span class="estado">terminados, los uso en los exámenes</span></div>
-    <p>Programas para mi HP Prime: tablas de vapor, circuitos, trifásica y un resolvedor de ecuaciones. Además del resultado, enseñan los pasos.</p>
-    <div class="fotos"><img src="fotos/prime_pasos.png" alt="Pantalla de la calculadora con los pasos del método de nudos" style="height:auto;width:100%;max-width:480px"></div>
-    <h4>Lo que aprendí</h4>
-    <ul>
-      <li>La calculadora apenas da información cuando falla, así que hicimos un comprobador propio que avisa antes.</li>
-      <li>Probar los casos raros y no solo el ejercicio típico. Un compañero encontró varios que fallaban.</li>
+      <li>Linter propio para lo que la calculadora no avisa bien (nombres reservados como <code>e</code> o <code>i</code>, <code>LOCAL</code> de más de 8 variables).</li>
+      <li>Orden fijo de comprobación: construir → linter → pruebas de estrés → recorrer todas las pantallas → emulador.</li>
+      <li>Pruebas en un emulador aparte y en segundo plano, sin tocar la pantalla de Carlos.</li>
+      <li>Más de 50 fallos apuntados, cada uno con la regla que dejó. Varios los encontró un compañero probando casos límite.</li>
     </ul>
     <p class="tech">HP PPL · Python</p>
   </div>
 
   <div class="proj">
-    <div class="top"><h3>Jarvis</h3><span class="estado">mi primer proyecto, sigue a ratos</span></div>
-    <p>Un asistente de voz para el ordenador. Fue con lo que empecé y donde más me equivoqué: quería que hiciera de todo y me pasaba el día arreglando cosas.</p>
-    <div class="fotos"><img src="fotos/jarvis.png" alt="Lista de funciones de Jarvis"></div>
-    <h4>Lo que aprendí</h4>
+    <div class="top"><h3>La carrera (Termodinámica y el resto)</h3><span class="estado">en uso diario</span></div>
+    <p>El material de las seis asignaturas, ordenado para que Claude haga de profesor: repasos de cada clase a partir de los apuntes, ejercicios resueltos con el método de la asignatura y formularios para los exámenes.</p>
+    <div class="fotos">
+      <figure><img src="fotos/folio_1.png" alt="Formulario de Termodinámica, cara 1"><figcaption>Formulario de Termo para el examen, cara 1</figcaption></figure>
+      <figure><img src="fotos/folio_2.png" alt="Formulario de Termodinámica, cara 2"><figcaption>Cara 2: ciclos con sus esquemas</figcaption></figure>
+      <figure><img src="fotos/resuelto_1.png" alt="Documento de ejercicios resueltos"><figcaption>Ejercicios resueltos, Tema 4</figcaption></figure>
+    </div>
+    <h4>Qué se cambió por el camino</h4>
     <ul>
-      <li>Un modelo pequeño con muchas herramientas delante elige mal. Con menos, funcionaba mejor.</li>
-      <li>Ir poco a poco. Casi todas las reglas que uso ahora salieron de aquí.</li>
+      <li>Al principio se daban fórmulas por sabidas. Ahora cada una lleva de dónde sale.</li>
+      <li>Cada solución cita el método de la asignatura y va debajo de su enunciado, no al final.</li>
+      <li>Los números de estado y las figuras se copian del material del profesor, no se inventan.</li>
+      <li>Los esquemas del formulario se dibujan por código y se revisan como imagen hasta que caben.</li>
     </ul>
-    <p class="tech">Python · Whisper · modelos locales</p>
+    <p class="tech">Claude Code · skills · Python · HTML a PDF</p>
+  </div>
+
+  <div class="proj">
+    <div class="top"><h3>App del gimnasio</h3><span class="estado">en pausa desde septiembre · v0.37</span></div>
+    <p>Para apuntar el peso de cada máquina y ver si se progresa o no. Luego se añadieron nutrición, planificador, mapa de gimnasios y cuentas en la nube. 37 versiones entre julio y septiembre.</p>
+    <div class="fotos">
+      <figure><img src="fotos/gym_hoy.png" alt="Pantalla de inicio"><figcaption>Inicio (v0.37)</figcaption></figure>
+      <figure><img src="fotos/gym_panel.png" alt="Gráficas de progreso"><figcaption>Progreso, con datos de prueba</figcaption></figure>
+    </div>
+    <p><a href="demo-gym/" target="_blank" rel="noopener">Abrir la app en el navegador</a> <span class="muted">(empieza vacía)</span></p>
+    <h4>Qué se cambió por el camino</h4>
+    <ul>
+      <li>Un fallo del buscador volvía en cada versión. Se resolvió dejando de parchearlo y probándolo fuera de la app.</li>
+      <li>De los datos de ejercicios de un repositorio se usaron los textos (licencia MIT), no las animaciones (con copyright).</li>
+      <li>Pausada al empezar el curso. Queda unir la última rama con la principal.</li>
+    </ul>
+    <p class="tech">JavaScript · Android · Supabase · Cloudflare</p>
+  </div>
+
+  <div class="proj">
+    <div class="top"><h3>Jarvis</h3><span class="estado">primer proyecto · a ratos</span></div>
+    <p>Asistente de voz para el ordenador. Fue el primero y de él salieron casi todas las reglas de arriba.</p>
+    <div class="fotos"><figure><img src="fotos/jarvis.png" alt="Lista de funciones de Jarvis"><figcaption>Lista de funciones</figcaption></figure></div>
+    <h4>Qué se cambió por el camino</h4>
+    <ul>
+      <li>Con unas 60 herramientas, el modelo local pequeño elegía mal. Se redujeron a las necesarias.</li>
+      <li>Muchas funciones a la vez acababan en arreglos casi diarios. De ahí el changelog y el registro de errores.</li>
+    </ul>
+    <p class="tech">Python · Whisper · Claude + modelos locales</p>
   </div>
 </section>
 
 <footer>
-  El código de los proyectos está en repositorios privados de <a href="https://github.com/carlosparmar2006-collab" target="_blank" rel="noopener">GitHub</a>. Esta página la hice con Claude.
+  Código de los proyectos en repositorios privados de <a href="https://github.com/carlosparmar2006-collab" target="_blank" rel="noopener">GitHub</a>. Página hecha con Claude.
 </footer>
 </div>
 <script>
