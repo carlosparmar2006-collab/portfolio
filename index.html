@@ -3,290 +3,124 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Carlos · Trabajar con IA</title>
-<meta name="description" content="Cómo trabajo con IA: la arquitectura que he montado con Claude, los proyectos que han salido de ella y lo que he aprendido de los errores.">
+<title>Carlos · Proyectos con IA</title>
+<meta name="description" content="Lo que he hecho con Claude desde julio de 2026 y cómo trabajo con él.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#f7f6f2;--surface:#ffffff;--surface2:#efede6;--text:#1c1b19;--muted:#5f5c55;
-  --line:#dedad0;--accent:#c2562a;--accent-soft:#f6e3d8;--ok:#2f7d4f;--ok-soft:#dcefe3;
-  --warn:#9a6a00;--warn-soft:#f6ebcc;--idle:#6b6b78;--idle-soft:#e6e6ee;
-  --mono:'JetBrains Mono',ui-monospace,monospace;
-}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#141413;--surface:#1d1c1a;--surface2:#262521;--text:#ecebe6;--muted:#a19d93;
-  --line:#34322d;--accent:#e57c4c;--accent-soft:#3a2418;--ok:#6cc08f;--ok-soft:#1d3326;
-  --warn:#e0b44c;--warn-soft:#3a2f12;--idle:#a5a5b4;--idle-soft:#2a2a33;}}
-:root[data-theme="dark"]{
-  --bg:#141413;--surface:#1d1c1a;--surface2:#262521;--text:#ecebe6;--muted:#a19d93;
-  --line:#34322d;--accent:#e57c4c;--accent-soft:#3a2418;--ok:#6cc08f;--ok-soft:#1d3326;
-  --warn:#e0b44c;--warn-soft:#3a2f12;--idle:#a5a5b4;--idle-soft:#2a2a33;}
+:root{--bg:#fafaf8;--card:#fff;--text:#222;--muted:#666;--line:#e6e4df;--link:#2b5fb4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161616;--card:#1f1f1f;--text:#e8e8e6;--muted:#9d9d99;--line:#333;--link:#8ab4f8}}
+:root[data-theme="dark"]{--bg:#161616;--card:#1f1f1f;--text:#e8e8e6;--muted:#9d9d99;--line:#333;--link:#8ab4f8}
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:960px;margin:0 auto;padding:0 16px}
-nav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-nav .wrap{display:flex;gap:18px;align-items:center;height:52px;overflow-x:auto;white-space:nowrap}
-nav a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500}
-nav a:hover{color:var(--text)}
-nav .brand{color:var(--text);font-weight:700;margin-right:auto}
-header{padding:64px 0 40px}
-.kicker{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:.04em}
-h1{font-size:clamp(30px,5vw,46px);line-height:1.12;margin:12px 0 18px;letter-spacing:-.02em}
-h2{font-size:28px;letter-spacing:-.01em;margin:0 0 8px}
-h3{font-size:19px;margin:0 0 6px}
-.lead{font-size:18px;color:var(--muted);max-width:680px}
-section{padding:48px 0;border-top:1px solid var(--line)}
-.sub{color:var(--muted);margin:0 0 28px;max-width:700px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:32px}
-.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
-.stat b{display:block;font-size:26px;letter-spacing:-.02em}
-.stat span{font-size:13px;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
-.card p{margin:6px 0 0;color:var(--muted);font-size:15px}
-.tag{display:inline-block;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:6px;background:var(--surface2);color:var(--muted);margin:0 4px 4px 0}
-.pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px}
-.pill.ok{background:var(--ok-soft);color:var(--ok)}
-.pill.warn{background:var(--warn-soft);color:var(--warn)}
-.pill.idle{background:var(--idle-soft);color:var(--idle)}
-code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:1px 5px;border-radius:5px}
-/* diagrama */
-.arch{display:grid;gap:10px;margin:8px 0 28px}
-.layer{display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
-.layer .lbl{font-family:var(--mono);font-size:13px;color:var(--accent);padding-top:2px}
-.layer p{margin:0;font-size:15px;color:var(--muted)}
-.layer p b{color:var(--text)}
-@media (max-width:620px){.layer{grid-template-columns:1fr;gap:4px}}
-/* proyectos */
-.proj{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px;margin-bottom:18px}
-.proj-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px}
-.proj-head h3{font-size:22px}
-.proj .what{color:var(--muted);margin:4px 0 14px}
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px}
-@media (max-width:720px){.cols{grid-template-columns:1fr}}
-.cols h4{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
-.cols ul{margin:0;padding-left:18px;font-size:15px}
-.cols li{margin-bottom:7px}
-.btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:9px 16px;border-radius:10px}
-.btn:hover{filter:brightness(1.07)}
-.note{font-size:14px;color:var(--muted);background:var(--surface2);border-radius:10px;padding:10px 14px;margin-top:14px}
-/* timeline */
-.tl{position:relative;margin-left:8px;padding-left:24px;border-left:2px solid var(--line)}
-.tl .ev{position:relative;margin-bottom:22px}
-.tl .ev::before{content:"";position:absolute;left:-31px;top:6px;width:12px;height:12px;border-radius:50%;background:var(--accent);border:3px solid var(--bg)}
-.tl .when{font-family:var(--mono);font-size:13px;color:var(--accent)}
-.tl .ev p{margin:2px 0 0;color:var(--muted);font-size:15px}
-/* errores */
-table{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
-th{background:var(--surface2);font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
-tr:last-child td{border-bottom:0}
-.tablewrap{overflow-x:auto;border-radius:12px}
-.lessons{counter-reset:l;display:grid;gap:12px}
-.lesson{counter-increment:l;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px 16px 56px;position:relative}
-.lesson::before{content:counter(l,decimal-leading-zero);position:absolute;left:18px;top:16px;font-family:var(--mono);color:var(--accent);font-weight:500}
-.lesson b{display:block;margin-bottom:2px}
-.lesson span{color:var(--muted);font-size:15px}
-footer{padding:40px 0 60px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
-footer a{color:var(--text)}
-.theme{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:4px 9px;cursor:pointer;font:inherit;font-size:13px}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+a{color:var(--link)}
+header{padding:56px 0 24px}
+h1{font-size:28px;font-weight:600;margin:0 0 10px}
+h2{font-size:20px;font-weight:600;margin:0 0 14px}
+h3{font-size:18px;font-weight:600;margin:0}
+p{margin:0 0 10px}
+.muted{color:var(--muted)}
+section{padding:32px 0;border-top:1px solid var(--line)}
+ul{padding-left:20px;margin:0}
+li{margin-bottom:6px}
+.proj{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.estado{font-size:13px;color:var(--muted)}
+.fotos{display:flex;gap:10px;overflow-x:auto;margin:14px 0}
+.fotos img{height:300px;width:auto;border-radius:8px;border:1px solid var(--line);flex:none}
+.fotos img.ancha{height:auto;width:100%;max-height:none}
+.proj h4{font-size:14px;font-weight:600;margin:14px 0 6px}
+.proj ul{font-size:15px}
+.tech{font-size:13px;color:var(--muted);margin-top:12px}
+footer{padding:28px 0 48px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+.theme{position:fixed;top:12px;right:12px;background:var(--card);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:4px 9px;cursor:pointer;font:inherit;font-size:13px}
+@media (max-width:520px){.fotos img{height:240px}}
 </style>
 </head>
 <body>
-<nav><div class="wrap">
-  <a class="brand" href="#">Carlos · IA</a>
-  <a href="#como">Cómo trabajo</a>
-  <a href="#evolucion">Evolución</a>
-  <a href="#proyectos">Proyectos</a>
-  <a href="#errores">Errores</a>
-  <a href="#aprendido">Aprendido</a>
-  <button class="theme" id="theme" aria-label="Cambiar tema">◐</button>
-</div></nav>
-
+<button class="theme" id="theme" aria-label="Cambiar tema">◐</button>
 <div class="wrap">
+
 <header>
-  <div class="kicker">ESTUDIANTE DE GETI · ETSEIB (UPC)</div>
-  <h1>No he hecho «una app con IA».<br>He montado un sistema para trabajar con ella.</h1>
-  <p class="lead">Desde julio de 2026 trabajo a diario con agentes de IA (Claude Code, sobre todo) en proyectos reales: una app de móvil, un asistente de voz, programas para una calculadora y toda mi carrera. Lo que enseño aquí no es solo el resultado: es la arquitectura que hemos ido diseñando para que la IA trabaje bien, cómo ha cambiado con los meses y qué errores la han ido moldeando.</p>
-  <div class="stats">
-    <div class="stat"><b>4</b><span>proyectos con IA en uso real</span></div>
-    <div class="stat"><b>260+</b><span>commits entre GYM, Jarvis y la carrera</span></div>
-    <div class="stat"><b>37</b><span>versiones de la app del gym en 6 semanas</span></div>
-    <div class="stat"><b>51</b><span>notas de memoria del proyecto de la carrera</span></div>
-    <div class="stat"><b>60+</b><span>errores apuntados con su causa raíz</span></div>
-  </div>
+  <h1>Carlos · proyectos con IA</h1>
+  <p class="muted">Estudio Ingeniería en Tecnologías Industriales (GETI) en la ETSEIB. Desde julio de 2026 uso Claude casi cada día. Esto es lo que he hecho con él, cómo están las cosas y qué he aprendido por el camino.</p>
 </header>
 
-<section id="como">
-  <h2>Cómo trabajo con la IA</h2>
-  <p class="sub">El problema de fondo es que un agente empieza cada sesión sin acordarse de nada, y que cada vez que relee todo el proyecto se gasta contexto y dinero. Todo esto existe para resolver eso, y para que no repita los mismos fallos.</p>
-
-  <div class="arch">
-    <div class="layer"><div class="lbl">1 · Matriz</div><p><b>Un <code>CLAUDE.md</code> «padre»</b> que se carga solo en cualquier proyecto: cómo arrancar una sesión sin explorar el proyecto entero, cómo cerrar cada turno, y un registro de qué proyectos hay y en qué estado está cada uno.</p></div>
-    <div class="layer"><div class="lbl">2 · Proyecto</div><p><b>Cada proyecto hereda la matriz</b> y añade solo lo suyo. Un script (enganchado al arranque de sesión) le pone la plantilla automáticamente a cualquier carpeta nueva: <code>CLAUDE.md</code>, <code>MEMORIA.md</code>, <code>CHANGELOG.md</code>, logs y <code>.gitignore</code>.</p></div>
-    <div class="layer"><div class="lbl">3 · Estado</div><p><b>Arranque barato:</b> el agente lee solo el bloque «Estado actual» de la memoria (máx. 25 líneas), la última entrada del log y los últimos 8 commits. Nada más. Lo concreto se busca con grep.</p></div>
-    <div class="layer"><div class="lbl">4 · Memoria</div><p><b>Una nota por regla estable</b>, enlazadas entre sí. Cada corrección mía se guarda con su <i>porqué</i> y su <i>cómo aplicarla</i>, para que la siguiente sesión no la repita. Lo que vale para varios proyectos sube a la matriz.</p></div>
-    <div class="layer"><div class="lbl">5 · Skills</div><p><b>Flujos repetibles empaquetados:</b> sincronizar el campus virtual, repasar lo de clase, ampliar el formulario de una asignatura, planificar la semana en el calendario, delegar en otro modelo. Cortas, con las reglas comunes en un único sitio.</p></div>
-    <div class="layer"><div class="lbl">6 · Errores</div><p><b>Cada fallo se apunta</b> con síntoma, causa raíz, arreglo y la prueba que evita que vuelva. Antes de tocar algo que ya falló, el agente tiene que leerlo.</p></div>
-    <div class="layer"><div class="lbl">7 · Verificar</div><p><b>Nada se entrega sin probarlo</b> en la app real y con datos reales: tests, linter propio, emulador, y los PDF se miran rasterizados porque en el texto plano las fórmulas no se ven.</p></div>
-    <div class="layer"><div class="lbl">8 · Cierre</div><p><b>Cada turno termina igual:</b> actualizar el estado, una línea en el log, el error si lo hubo y un <b>commit</b> en español diciendo qué cambió y qué se verificó. Sin historial, la siguiente sesión tendría que releerlo todo.</p></div>
-    <div class="layer"><div class="lbl">9 · Límites</div><p><b>Separar límites reales de preferencias.</b> Un documento dice qué puede hacer de verdad el agente y qué no se cruza aunque yo lo pida (contraseñas, 2FA, pagos, borrar sin mirar). Antes de decir «no puedo», tiene que leerlo.</p></div>
-  </div>
-
-  <div class="grid">
-    <div class="card"><h3>Varios modelos, cada uno a lo suyo</h3><p>Claude para diseñar y revisar; Gemini para trabajos largos y repetitivos, pero en una <b>copia aislada</b> del proyecto, con un hook que impide borrar y sincronización controlada. Modelos locales (Ollama, qwen3) para lo que tiene que funcionar sin internet.</p></div>
-    <div class="card"><h3>Reglas de calidad explícitas</h3><p>En la carrera: toda solución cita el método de la asignatura, el enunciado va recortado del PDF del profesor con la solución justo debajo, y los datos se copian del material oficial. «No encontrado» antes que inventar.</p></div>
-    <div class="card"><h3>Contexto como recurso</h3><p>Medí qué herramientas y plugins consumían contexto en cada sesión y desactivé lo que no tocaba en cada proyecto. Un agente con 60 herramientas delante elige peor que uno con 2 (lo comprobé, abajo).</p></div>
-  </div>
+<section>
+  <h2>Cómo trabajo</h2>
+  <p>Al principio le pedía cosas y ya. Con los meses he ido montando unas reglas para que no se le olvide todo entre sesiones y no repita los mismos fallos:</p>
+  <ul>
+    <li>Un fichero de instrucciones común a todos mis proyectos, y uno propio en cada proyecto.</li>
+    <li>Al empezar, solo lee el estado del proyecto y los últimos cambios, no todo el código.</li>
+    <li>Cuando algo sale mal, se apunta qué pasó y por qué, y se convierte en una regla o un test.</li>
+    <li>Nada se da por terminado sin probarlo en la app de verdad.</li>
+    <li>Cada vez que toca algo, hace un commit explicando qué ha cambiado.</li>
+    <li>Para tareas largas y repetitivas uso Gemini, en una copia aparte del proyecto.</li>
+  </ul>
 </section>
 
-<section id="evolucion">
-  <h2>Cómo ha ido cambiando</h2>
-  <p class="sub">La arquitectura no se diseñó de golpe: cada pieza salió de un problema concreto.</p>
-  <div class="tl">
-    <div class="ev"><div class="when">JULIO 2026 · JARVIS</div><h3>Primer proyecto: probar todo a la vez</h3><p>Un asistente de voz con decenas de funciones. Aprendí lo básico a base de golpes: hotfixes casi diarios, versiones «Mark 14» a «Mark 24» en un mes. De aquí salen el <code>CHANGELOG</code> por versión y el registro de errores con causa raíz.</p></div>
-    <div class="ev"><div class="when">JULIO–SEPTIEMBRE · GYM</div><h3>Un proyecto con usuario real (yo)</h3><p>37 versiones en seis semanas, cada una a partir de mi propio feedback usándola en el gimnasio; de app local a nube con cuentas. Aparecen los tests de paridad, la regla de medir antes de decidir y la de revisar licencias antes de usar material de terceros.</p></div>
-    <div class="ev"><div class="when">SEPTIEMBRE · CARRERA</div><h3>La IA como profesor</h3><p>Empiezo el curso y monto el proyecto de la uni. Aparecen las skills (repasos, formularios, campus virtual) y las reglas de calidad de los documentos. Las skills largas se parten: reglas comunes en un solo sitio.</p></div>
-    <div class="ev"><div class="when">OCTUBRE · HP PRIME</div><h3>Código que no puedo probar fácilmente</h3><p>Programas para una calculadora con su propio lenguaje. Nace el orden de verificación obligatorio (construir → linter → estrés → recorridos → emulador) y el fichero de lecciones que se lee antes de tocar nada.</p></div>
-    <div class="ev"><div class="when">NOVIEMBRE · MATRIZ</div><h3>Ordenar todo lo aprendido</h3><p>Con varios proyectos vivos, lo común sube a una matriz con plantilla automática, arranque barato y cierre obligatorio. Auditoría de capacidades y límites, y recorte de contexto por proyecto.</p></div>
-  </div>
-</section>
-
-<section id="proyectos">
+<section>
   <h2>Proyectos</h2>
-  <p class="sub">Los repositorios son privados; aquí está qué es cada uno, en qué estado está y qué me ha enseñado.</p>
 
-  <article class="proj">
-    <div class="proj-head"><h3>GYM · entrenamiento, nutrición y comunidad</h3><span class="pill warn">En pausa · v0.37.1</span></div>
-    <p class="what">Empezó como una app para apuntar qué peso levantas en cada máquina y detectar estancamientos (olvidaba cuánto levantaba y me estancaba sin saberlo). En seis semanas pasó a ser una app completa: entrenamiento y planificador, nutrición con buscador de alimentos y código de barras, mapa de gimnasios, cuentas en la nube, enlaces para compartir por WhatsApp, medallas por materiales y un «vestuario» de personalización con animaciones. Funciona sin cobertura y se publica sola en la web con cada cambio.</p>
-    <div><span class="tag">HTML/CSS/JS sin frameworks</span><span class="tag">IndexedDB</span><span class="tag">PWA + APK Android</span><span class="tag">Supabase (cuentas, RLS)</span><span class="tag">Cloudflare Workers</span><span class="tag">OpenStreetMap</span><span class="tag">Open Food Facts</span><span class="tag">GitHub Actions (APK)</span></div>
-    <div class="cols">
-      <div><h4>Qué hemos mejorado</h4><ul>
-        <li><b>37 versiones en 6 semanas</b> (27-jul → 7-sep), cada una a partir de lo que yo veía usándola en el gimnasio. 99 commits.</li>
-        <li><b>De PC de casa a la nube:</b> primero el dato vivía en el móvil y se copiaba al PC; después, cuentas en Supabase con políticas de seguridad por fila y la web en Cloudflare, gratis con repo privado.</li>
-        <li><b>El buscador de sitios, al servidor:</b> fallaba en silencio versión tras versión porque OpenStreetMap exige una cabecera que el navegador prohíbe mandar. Se movió a un Worker y se probó fuera de la app con 66 comprobaciones.</li>
-        <li><b>Actualizar sin perder datos</b> (v0.31): tres quejas mías eran una sola cadena: no actualizaba → había que desinstalar → al reinstalar se perdía todo.</li>
-        <li><b>De 69 a 1.365 ejercicios</b> con un traductor propio de nombres al castellano de gimnasio.</li>
-      </ul></div>
-      <div><h4>Qué he aprendido</h4><ul>
-        <li><b>«Deja de aplicar parches»:</b> cuando un fallo vuelve, hay que cambiar de enfoque y probarlo en un entorno controlado, no tocar la app otra vez.</li>
-        <li><b>Leer el diagnóstico antes de adivinar:</b> el repuesto del buscador llevaba seis versiones sin contestar nunca (un parámetro de idioma no admitido) y la app cortaba a los 8 s lo que el servidor tardaba 12.</li>
-        <li><b>El permiso no era el problema, era el origen:</b> la ubicación no funcionaba porque dentro del APK la página no se sirve desde un origen seguro.</li>
-        <li><b>Licencias y seguridad:</b> datos MIT sí, GIF con copyright no; ninguna clave secreta dentro de un APK.</li>
-        <li><b>Calidad visual:</b> las animaciones generadas en el móvil no daban la talla; se pasó a piezas prerenderizadas, a costa del peso de la app.</li>
-      </ul></div>
-    </div>
-    <p class="note"><b>Por qué está en pausa:</b> la última versión es del 7 de septiembre; al empezar el curso, la prioridad pasó al proyecto de la carrera. Quedaba unir el rediseño del vestuario (en una rama aparte) con la versión principal y acabar la publicación en Google Play.</p>
-    <p style="margin-top:16px"><a class="btn" href="demo-gym/" target="_blank" rel="noopener">Abrir la app (v0.37.1) →</a></p>
-    <p class="note">La demo corre en el navegador y empieza vacía: se monta un gimnasio desde el catálogo en un minuto. Las animaciones grandes del vestuario tardan un poco en cargar la primera vez.</p>
-  </article>
+  <div class="proj">
+    <div class="top"><h3>App del gimnasio</h3><span class="estado">en pausa desde septiembre · v0.37</span></div>
+    <p>La hice porque se me olvidaba cuánto levantaba en cada máquina. Empezó siendo eso y fue creciendo: nutrición, planificador, mapa de gimnasios, cuentas y compartir con amigos.</p>
+    <div class="fotos" id="fotos-gym"><img src="fotos/gym_hoy.png" alt="Pantalla de bienvenida de la app del gimnasio" loading="lazy"><img src="fotos/gym_panel.png" alt="Gráficas de progreso de la app del gimnasio" loading="lazy"></div>
+    <p><a href="demo-gym/" target="_blank" rel="noopener">Probar la app en el navegador</a> <span class="muted">(empieza vacía)</span></p>
+    <h4>Lo que aprendí</h4>
+    <ul>
+      <li>Hubo un fallo que volvía versión tras versión. Dejó de volver cuando paré de parchearlo y lo probamos fuera de la app.</li>
+      <li>Mirar las licencias: los datos de ejercicios se podían usar, las animaciones de ese mismo repositorio no.</li>
+    </ul>
+    <p class="tech">JavaScript · Android · Supabase · Cloudflare</p>
+  </div>
 
-  <article class="proj">
-    <div class="proj-head"><h3>UPCxClaude · la carrera con la IA como profesor</h3><span class="pill ok">Activo · uso diario</span></div>
-    <p class="what">El material del campus virtual de mis seis asignaturas, reorganizado y anotado para que la IA haga de profesor de cada una con el material del profesor delante: repasos después de clase a partir de mis apuntes de la tablet, formularios acumulativos, ejercicios resueltos, exámenes ordenados por curso y bloques de estudio en el calendario.</p>
-    <div><span class="tag">Claude Code + skills</span><span class="tag">Python</span><span class="tag">HTML → PDF con KaTeX</span><span class="tag">Automatización de navegador</span><span class="tag">Google Calendar</span><span class="tag">Gemini (delegado)</span></div>
-    <div class="cols">
-      <div><h4>Qué hemos mejorado</h4><ul>
-        <li><b>6 skills</b>: sincronizar el campus, repaso de lo de hoy, formularios, repaso semanal, planificar la semana y delegar en Gemini.</li>
-        <li><b>Un documento por asignatura y tema</b>, con nombre legible y el HTML fuente escondido. Al principio aquello era un caos de ficheros.</li>
-        <li><b>Soluciones con su método:</b> cada ejercicio con el enunciado recortado del PDF, la solución debajo, cada paso entero y sin saltos.</li>
-        <li><b>Folio de examen</b> de Termodinámica generado por código, con 30 esquemas dibujados y verificado rasterizado (6 de 6 columnas caben).</li>
-      </ul></div>
-      <div><h4>Qué he aprendido</h4><ul>
-        <li><b>La IA asumía lo que yo sabía:</b> soltó fórmulas sin justificar porque dije «es la segunda vez que hago termo». Regla nueva: toda fórmula con su porqué y su deducción la primera vez.</li>
-        <li><b>Un paso que falla no puede encadenar el siguiente:</b> un script falló y el siguiente renombró exámenes igualmente. Se arregló comparando cada fichero por su hash.</li>
-        <li><b>Verificar lo que se ve:</b> en un PDF, las fórmulas no aparecen en el texto extraído; hay que mirar la imagen.</li>
-      </ul></div>
-    </div>
-    <p class="note">Material de la universidad y apuntes personales: no se publica. Aquí solo se describe el sistema.</p>
-  </article>
+  <div class="proj">
+    <div class="top"><h3>La carrera</h3><span class="estado">en uso cada día</span></div>
+    <p>Tengo el material de todas las asignaturas organizado para que Claude me haga de profesor: repasa lo de clase con mis apuntes, me resuelve ejercicios con el método de la asignatura y me hace los formularios para los exámenes.</p>
+    <div class="fotos"><img class="ancha" src="fotos/folio.png" alt="Trozo del formulario de Termodinámica" loading="lazy"></div>
+    <h4>Lo que aprendí</h4>
+    <ul>
+      <li>Al principio daba por sabidas cosas que yo no recordaba. Ahora cada fórmula viene explicada.</li>
+      <li>Las soluciones tienen que seguir el método del profesor, no uno cualquiera que dé el mismo número.</li>
+    </ul>
+    <p class="tech">Claude Code · Python · PDF</p>
+  </div>
 
-  <article class="proj">
-    <div class="proj-head"><h3>Apps de la HP Prime · TERMO, ELECTRO y RESOLVER</h3><span class="pill ok">Terminadas · en uso</span></div>
-    <p class="what">Programas para la calculadora gráfica que uso en los exámenes: tablas de vapor y refrigerantes con interpolación, compresibilidad (Lee-Kesler), ciclos de potencia con sus esquemas, circuitos y trifásica, y un resolvedor de ecuaciones con el CAS. Todos enseñan el procedimiento paso a paso, no solo el resultado.</p>
-    <div><span class="tag">HP PPL</span><span class="tag">Python (construcción y linter)</span><span class="tag">Intérprete propio en PC</span><span class="tag">Emulador automatizado</span></div>
-    <div class="cols">
-      <div><h4>Qué hemos mejorado</h4><ul>
-        <li><b>Linter propio</b> que detecta lo que el compilador de la calculadora no avisa bien (nombres reservados como <code>e</code> o <code>i</code>, <code>LOCAL</code> de más de 8 variables…).</li>
-        <li><b>Orden de verificación obligatorio:</b> construir → linter → pruebas de estrés → recorrer todas las pantallas → emulador.</li>
-        <li><b>Pruebas en un emulador aparte y en segundo plano</b>, sin tocar mi pantalla ni mi emulador.</li>
-        <li><b>De programas sueltos a apps</b>: lanzadores pequeños que llaman a programas, porque una app de 950 KB no compilaba.</li>
-      </ul></div>
-      <div><h4>Qué he aprendido</h4><ul>
-        <li><b>Probar los bordes, no solo el ejercicio típico:</b> junto a saturación, por encima del punto crítico, fuera de tablas, entradas a cero. Un compañero encontró casos que extrapolaban sin avisar.</li>
-        <li><b>«Ayer funcionaba»:</b> no se quita un programa que funciona hasta que el nuevo está probado tecla a tecla.</li>
-        <li><b>Los números se copian del material de clase:</b> la numeración de estados inventada no coincidía con la del profesor.</li>
-      </ul></div>
-    </div>
-    <p class="note">El registro de esta parte tiene más de 50 fallos apuntados, cada uno con su regla. Es el que mejor muestra cómo trabajo: el error se convierte en una comprobación automática.</p>
-  </article>
+  <div class="proj">
+    <div class="top"><h3>Programas para la calculadora</h3><span class="estado">terminados, los uso en los exámenes</span></div>
+    <p>Programas para mi HP Prime: tablas de vapor, circuitos, trifásica y un resolvedor de ecuaciones. Además del resultado, enseñan los pasos.</p>
+    <div class="fotos"><img src="fotos/prime_pasos.png" alt="Pantalla de la calculadora con los pasos del método de nudos" loading="lazy" style="height:auto;width:100%;max-width:480px"></div>
+    <h4>Lo que aprendí</h4>
+    <ul>
+      <li>La calculadora apenas da información cuando falla, así que hicimos un comprobador propio que avisa antes.</li>
+      <li>Probar los casos raros y no solo el ejercicio típico. Un compañero encontró varios que fallaban.</li>
+    </ul>
+    <p class="tech">HP PPL · Python</p>
+  </div>
 
-  <article class="proj">
-    <div class="proj-head"><h3>JARVIS · mi primer proyecto con IA</h3><span class="pill idle">Activo · experimental</span></div>
-    <p class="what">Un asistente de voz para el PC en español: palabra de activación, voz sintetizada, memoria por usuario, calendario y correo, control de la tele y de la app del gym. Fue donde empecé y donde aprendí casi todo lo básico, a base de equivocarme mucho.</p>
-    <div><span class="tag">Python</span><span class="tag">Whisper</span><span class="tag">Claude + Ollama (qwen3)</span><span class="tag">Bucle ReAct con herramientas</span><span class="tag">PWA + Android</span><span class="tag">~50 tests</span></div>
-    <div class="cols">
-      <div><h4>Qué hemos mejorado</h4><ul>
-        <li><b>Cerebro híbrido:</b> un router local para los comandos comunes, Claude para razonar y un modelo local de respaldo sin internet.</li>
-        <li><b>Encargos por turnos:</b> dos modelos locales no cabían a la vez en 8 GB de GPU y se echaban mutuamente; ahora los encargos van a una cola.</li>
-        <li><b>99 commits</b> y un changelog por versión.</li>
-      </ul></div>
-      <div><h4>Qué he aprendido</h4><ul>
-        <li><b>Menos herramientas, mejores decisiones:</b> con ~60 herramientas, un modelo de 4B decía «no puedo acceder a internet» teniendo el navegador delante. Con solo 2, entró y leyó la página. Era un fallo conocido del proyecto original.</li>
-        <li><b>Medir antes de añadir:</b> pasar de 32K a 64K de contexto bajaba la velocidad de 104 a ~40 tokens/s.</li>
-        <li><b>Abarcar demasiado</b> llena el proyecto de hotfixes. De ahí salió todo el orden que hay en los demás.</li>
-      </ul></div>
-    </div>
-  </article>
-</section>
-
-<section id="errores">
-  <h2>Errores que cambiaron la forma de trabajar</h2>
-  <p class="sub">Una selección del registro. Lo importante es la última columna: cada fallo deja una regla o una comprobación.</p>
-  <div class="tablewrap"><table>
-    <thead><tr><th>Qué pasó</th><th>Causa raíz</th><th>Lo que cambió</th></tr></thead>
-    <tbody>
-      <tr><td>Un programa no abría en la calculadora: «error de sintaxis»</td><td>Un parámetro llamado <code>e</code>, que en la Prime es la constante de Euler</td><td>El linter avisa de nombres reservados, y es obligatorio pasarlo</td></tr>
-      <tr><td>La app cifrada se subió al Drive con el código visible</td><td>«Cifrar» fallaba sin avisar y nadie lo comprobó</td><td>El script de subida se niega a subir nada que contenga <code>BEGIN</code></td></tr>
-      <tr><td>Las pruebas me cerraban el emulador mientras yo trabajaba</td><td>El script cerraba todas las ventanas con ese nombre</td><td>Emulador de pruebas aparte, controlado en segundo plano</td></tr>
-      <tr><td>Exámenes renombrados mal</td><td>Dos pasos encadenados: el primero falló y el segundo siguió</td><td>No se encadena un paso que mueve ficheros sin comprobar el anterior</td></tr>
-      <tr><td>El asistente decía no tener internet con el navegador delante</td><td>Demasiadas herramientas para un modelo pequeño</td><td>Solo 2 toolsets, y medir antes de añadir otro</td></tr>
-      <tr><td>Fórmulas sin explicar en un repaso</td><td>La IA dio por sabido lo que no recordaba</td><td>Toda fórmula se justifica; nunca se asume el nivel</td></tr>
-    </tbody>
-  </table></div>
-</section>
-
-<section id="aprendido">
-  <h2>Lo que he aprendido de trabajar con IA</h2>
-  <p class="sub">Lo que haría igual en cualquier equipo.</p>
-  <div class="lessons">
-    <div class="lesson"><b>El cuello de botella es el contexto, no el modelo.</b><span>Qué lee el agente al empezar, qué herramientas tiene delante y qué recuerda de antes decide más que el modelo que uses.</span></div>
-    <div class="lesson"><b>Una corrección que no se guarda se repite.</b><span>Por eso cada error acaba en memoria, en una regla o en un test, nunca solo en el chat.</span></div>
-    <div class="lesson"><b>«Hecho» significa verificado.</b><span>La IA tiende a dar las cosas por terminadas. La única defensa es exigir pruebas en el sistema real y mirar el resultado, no el informe.</span></div>
-    <div class="lesson"><b>Medir antes de decidir.</b><span>Latencias, tokens por segundo, licencias, tamaño de la app: casi todas las decisiones buenas salieron de una medida y no de una intuición.</span></div>
-    <div class="lesson"><b>Límites claros dan más autonomía.</b><span>Cuando está escrito qué no se cruza nunca, se le puede dejar hacer todo lo demás sin vigilar cada paso.</span></div>
-    <div class="lesson"><b>Saber parar un proyecto.</b><span>Hay proyectos en pausa porque tocaba priorizar. Dejarlos documentados (estado, pendiente, por qué) hace que retomarlos cueste poco.</span></div>
+  <div class="proj">
+    <div class="top"><h3>Jarvis</h3><span class="estado">mi primer proyecto, sigue a ratos</span></div>
+    <p>Un asistente de voz para el ordenador. Fue con lo que empecé y donde más me equivoqué: quería que hiciera de todo y me pasaba el día arreglando cosas.</p>
+    <div class="fotos"><img src="fotos/jarvis.png" alt="Lista de funciones de Jarvis" loading="lazy"></div>
+    <h4>Lo que aprendí</h4>
+    <ul>
+      <li>Un modelo pequeño con muchas herramientas delante elige mal. Con menos, funcionaba mejor.</li>
+      <li>Ir poco a poco. Casi todas las reglas que uso ahora salieron de aquí.</li>
+    </ul>
+    <p class="tech">Python · Whisper · modelos locales</p>
   </div>
 </section>
+
+<footer>
+  El código de los proyectos está en repositorios privados de <a href="https://github.com/carlosparmar2006-collab" target="_blank" rel="noopener">GitHub</a>. Esta página la hice con Claude.
+</footer>
 </div>
-
-<footer><div class="wrap">
-  Hecho con Claude Code siguiendo el mismo sistema que describe. Código de los proyectos en repositorios privados de
-  <a href="https://github.com/carlosparmar2006-collab" target="_blank" rel="noopener">GitHub</a>. Noviembre de 2026.
-</div></footer>
-
 <script>
-(function(){
-  var b=document.getElementById('theme'),r=document.documentElement;
-  try{var t=localStorage.getItem('tema');if(t)r.setAttribute('data-theme',t);}catch(e){}
-  b.addEventListener('click',function(){
-    var dark=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
-    var n=dark?'light':'dark';r.setAttribute('data-theme',n);
-    try{localStorage.setItem('tema',n);}catch(e){}
-  });
-})();
+(function(){var b=document.getElementById('theme'),r=document.documentElement;
+try{var t=localStorage.getItem('tema');if(t)r.setAttribute('data-theme',t);}catch(e){}
+b.addEventListener('click',function(){var d=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':matchMedia('(prefers-color-scheme: dark)').matches;var n=d?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('tema',n);}catch(e){}});})();
 </script>
 </body>
 </html>
