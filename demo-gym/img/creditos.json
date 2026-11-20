@@ -1,0 +1,475 @@
+{
+ "fuente": "Wikimedia Commons",
+ "nota": "Fotos de Wikimedia Commons. Cada una conserva su licencia; las CC BY y CC BY-SA exigen citar al autor, y las CC BY-SA obligan a compartir las versiones recortadas con la misma licencia.",
+ "fotos": {
+  "press-de-banca": {
+   "ejercicio": "Press de banca",
+   "archivo": "USMC-110816-F-2786W-005.jpg",
+   "autor": "Cpl. Courtney C. White",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:USMC-110816-F-2786W-005.jpg"
+  },
+  "press-inclinado-con-barra": {
+   "ejercicio": "Press inclinado con barra",
+   "archivo": "MWR GWOT.JPEG",
+   "autor": "Defense Visual Information SSGT RICKY A. BLOOM",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:MWR_GWOT.JPEG"
+  },
+  "press-de-banca-con-mancuernas": {
+   "ejercicio": "Press de banca con mancuernas",
+   "archivo": "Decline-dumbbell-bench-press-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Decline-dumbbell-bench-press-1.png"
+  },
+  "press-inclinado-con-mancuernas": {
+   "ejercicio": "Press inclinado con mancuernas",
+   "archivo": "Two Miles Ahead of the Curve- 86 MXO Airman embraces new fitness standards (9782536).jpg",
+   "autor": "U.S. Air Force photo by Airman 1st Class Paden Henry",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Two_Miles_Ahead_of_the_Curve-_86_MXO_Airman_embraces_new_fitness_standards_(9782536).jpg"
+  },
+  "press-de-pecho-en-maquina": {
+   "ejercicio": "Press de pecho en máquina",
+   "archivo": "Chinap, Chest, Back, Bicep, tricep Machine.jpg",
+   "autor": "Aliva Sahoo",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Chinap,_Chest,_Back,_Bicep,_tricep_Machine.jpg"
+  },
+  "aperturas-en-maquina-contractor": {
+   "ejercicio": "Aperturas en máquina (contractor)",
+   "archivo": "Lee Priest Sam's Fitness Pec Fly.jpg",
+   "autor": "Sam's Fitness - Gym Equipment",
+   "licencia": "CC BY 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Lee_Priest_Sam%27s_Fitness_Pec_Fly.jpg"
+  },
+  "aperturas-con-mancuernas": {
+   "ejercicio": "Aperturas con mancuernas",
+   "archivo": "Dumbbell-decline-flys-2.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dumbbell-decline-flys-2.png"
+  },
+  "cruces-en-polea": {
+   "ejercicio": "Cruces en polea",
+   "archivo": "Chest flies with cable machine - cable crossover flies.jpg",
+   "autor": "Nenad Stojkovic",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Chest_flies_with_cable_machine_-_cable_crossover_flies.jpg"
+  },
+  "fondos-en-paralelas": {
+   "ejercicio": "Fondos en paralelas",
+   "archivo": "Dips.jpg",
+   "autor": "soh32's",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dips.jpg"
+  },
+  "press-en-multipower": {
+   "ejercicio": "Press en multipower",
+   "archivo": "Smith machine.webp",
+   "autor": "Wikideas1",
+   "licencia": "CC0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Smith_machine.webp"
+  },
+  "jalon-al-pecho-en-polea": {
+   "ejercicio": "Jalón al pecho en polea",
+   "archivo": "Marian-Lats-Pull-Down.jpg",
+   "autor": "Abooyeah",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Marian-Lats-Pull-Down.jpg"
+  },
+  "jalon-tras-nuca": {
+   "ejercicio": "Jalón tras nuca",
+   "archivo": "Touchpoint 3 FMWR Torii Gym 23 JUL 2024 12 (8562464) (cropped).jpg",
+   "autor": "U.S. Army USAG-O by Ichiro Tokashiki",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Touchpoint_3_FMWR_Torii_Gym_23_JUL_2024_12_(8562464)_(cropped).jpg"
+  },
+  "remo-sentado-en-polea": {
+   "ejercicio": "Remo sentado en polea",
+   "archivo": "Woman using a seated cable row machine at the gym.jpg",
+   "autor": "Miguel Angel Omaña Rojas",
+   "licencia": "CC0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Woman_using_a_seated_cable_row_machine_at_the_gym.jpg"
+  },
+  "remo-en-maquina": {
+   "ejercicio": "Remo en máquina",
+   "archivo": "T-bar-row-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:T-bar-row-1.png"
+  },
+  "remo-con-barra": {
+   "ejercicio": "Remo con barra",
+   "archivo": "Barbell-rear-delt-row-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Barbell-rear-delt-row-1.png"
+  },
+  "remo-con-mancuerna-a-una-mano": {
+   "ejercicio": "Remo con mancuerna a una mano",
+   "archivo": "DumbbellBentOverRow.JPG",
+   "autor": "No machine-readable author provided. GeorgeStepanek assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:DumbbellBentOverRow.JPG"
+  },
+  "dominadas": {
+   "ejercicio": "Dominadas",
+   "archivo": "Girl doing pull up top position.jpg",
+   "autor": "PTPioneer",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Girl_doing_pull_up_top_position.jpg"
+  },
+  "dominadas-asistidas": {
+   "ejercicio": "Dominadas asistidas",
+   "archivo": "Dip and pull-up machine.jpg",
+   "autor": "Teemeah",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dip_and_pull-up_machine.jpg"
+  },
+  "pull-over-en-polea": {
+   "ejercicio": "Pull-over en polea",
+   "archivo": "Dumbbell-bent-arm-pullover-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dumbbell-bent-arm-pullover-1.png"
+  },
+  "peso-muerto": {
+   "ejercicio": "Peso muerto",
+   "archivo": "Watch me lift (5047995).jpg",
+   "autor": "U.S. Air Force photo by Airman 1st Class Jovante Johnson",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Watch_me_lift_(5047995).jpg"
+  },
+  "hiperextensiones-lumbar": {
+   "ejercicio": "Hiperextensiones (lumbar)",
+   "archivo": "Back extension bench.webp",
+   "autor": "Wikideas1",
+   "licencia": "CC0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Back_extension_bench.webp"
+  },
+  "press-militar-con-barra": {
+   "ejercicio": "Press militar con barra",
+   "archivo": "Attractive sporty woman doing overhead press in gym with barbell.jpg",
+   "autor": "Nenad Stojkovic",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Attractive_sporty_woman_doing_overhead_press_in_gym_with_barbell.jpg"
+  },
+  "press-de-hombro-con-mancuernas": {
+   "ejercicio": "Press de hombro con mancuernas",
+   "archivo": "Girl doing dumbbell shoulder press 02.jpg",
+   "autor": "Tyler  Read",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Girl_doing_dumbbell_shoulder_press_02.jpg"
+  },
+  "press-de-hombro-en-maquina": {
+   "ejercicio": "Press de hombro en máquina",
+   "archivo": "Shoulder Press.jpg",
+   "autor": "Aliva Sahoo",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Shoulder_Press.jpg"
+  },
+  "elevaciones-laterales-con-mancuernas": {
+   "ejercicio": "Elevaciones laterales con mancuernas",
+   "archivo": "Dumbbell-lateral-raises-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dumbbell-lateral-raises-1.png"
+  },
+  "elevaciones-laterales-en-polea": {
+   "ejercicio": "Elevaciones laterales en polea",
+   "archivo": "Bent-over-cable-lateral-raises-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Bent-over-cable-lateral-raises-1.png"
+  },
+  "elevaciones-frontales": {
+   "ejercicio": "Elevaciones frontales",
+   "archivo": "Girl exercising with front dumbbell raises.jpg",
+   "autor": "PTPioneer",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Girl_exercising_with_front_dumbbell_raises.jpg"
+  },
+  "pajaros-deltoides-posterior": {
+   "ejercicio": "Pájaros (deltoides posterior)",
+   "archivo": "Bent-over-cable-lateral-raises-2.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Bent-over-cable-lateral-raises-2.png"
+  },
+  "encogimientos-de-trapecio": {
+   "ejercicio": "Encogimientos de trapecio",
+   "archivo": "Dumbbell-shrugs-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dumbbell-shrugs-1.png"
+  },
+  "curl-de-biceps-con-barra": {
+   "ejercicio": "Curl de bíceps con barra",
+   "archivo": "Barbell Curl Partners (30425402018).jpg",
+   "autor": "Chris Hunkeler from Carlsbad, California, USA",
+   "licencia": "CC BY-SA 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Barbell_Curl_Partners_(30425402018).jpg"
+  },
+  "curl-de-biceps-con-mancuernas": {
+   "ejercicio": "Curl de bíceps con mancuernas",
+   "archivo": "Close up of the woman's hands while she's doing bicep curls with dumbbells. (50425016047).jpg",
+   "autor": "Nenad Stojkovic",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Close_up_of_the_woman%27s_hands_while_she%27s_doing_bicep_curls_with_dumbbells._(50425016047).jpg"
+  },
+  "curl-martillo": {
+   "ejercicio": "Curl martillo",
+   "archivo": "Girl doing one arm dumbbell curl exercise.jpg",
+   "autor": "PTPioneer",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Girl_doing_one_arm_dumbbell_curl_exercise.jpg"
+  },
+  "curl-en-banco-scott": {
+   "ejercicio": "Curl en banco Scott",
+   "archivo": "PreacherBenchBicepsCurl.JPG",
+   "autor": "No machine-readable author provided. GeorgeStepanek assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:PreacherBenchBicepsCurl.JPG"
+  },
+  "curl-en-polea-baja": {
+   "ejercicio": "Curl en polea baja",
+   "archivo": "Girl doing cable bicep curl exercise.jpg",
+   "autor": "Tyler  Read",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Girl_doing_cable_bicep_curl_exercise.jpg"
+  },
+  "curl-concentrado": {
+   "ejercicio": "Curl concentrado",
+   "archivo": "Concentration-curls-1.png",
+   "autor": "everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Concentration-curls-1.png"
+  },
+  "extension-de-triceps-en-polea": {
+   "ejercicio": "Extensión de tríceps en polea",
+   "archivo": "CableMachinePushdown.JPG",
+   "autor": "No machine-readable author provided. GeorgeStepanek assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:CableMachinePushdown.JPG"
+  },
+  "extension-de-triceps-con-cuerda": {
+   "ejercicio": "Extensión de tríceps con cuerda",
+   "archivo": "USMC-090211-M-0474R-004.jpg",
+   "autor": "Lance Cpl. Ryan A. Rholes",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:USMC-090211-M-0474R-004.jpg"
+  },
+  "press-frances": {
+   "ejercicio": "Press francés",
+   "archivo": "DumbbellTricepsExtension.JPG",
+   "autor": "No machine-readable author provided. GeorgeStepanek assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:DumbbellTricepsExtension.JPG"
+  },
+  "patada-de-triceps": {
+   "ejercicio": "Patada de tríceps",
+   "archivo": "Triceps-kickback-1.gif",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Triceps-kickback-1.gif"
+  },
+  "fondos-en-banco": {
+   "ejercicio": "Fondos en banco",
+   "archivo": "Bench-dips-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Bench-dips-1.png"
+  },
+  "press-cerrado": {
+   "ejercicio": "Press cerrado",
+   "archivo": "Narrow-grip-bench-press-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Narrow-grip-bench-press-1.png"
+  },
+  "sentadilla-con-barra": {
+   "ejercicio": "Sentadilla con barra",
+   "archivo": "Woman doing squat workout in gym with barbell, back view.jpg",
+   "autor": "Nenad Stojkovic",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Woman_doing_squat_workout_in_gym_with_barbell,_back_view.jpg"
+  },
+  "sentadilla-en-multipower": {
+   "ejercicio": "Sentadilla en multipower",
+   "archivo": "Приседания в тренажере Смита.jpg",
+   "autor": "ru:User:Russianname",
+   "licencia": "CC BY-SA 2.5",
+   "pagina": "https://commons.wikimedia.org/wiki/File:%D0%9F%D1%80%D0%B8%D1%81%D0%B5%D0%B4%D0%B0%D0%BD%D0%B8%D1%8F_%D0%B2_%D1%82%D1%80%D0%B5%D0%BD%D0%B0%D0%B6%D0%B5%D1%80%D0%B5_%D0%A1%D0%BC%D0%B8%D1%82%D0%B0.jpg"
+  },
+  "prensa-de-piernas": {
+   "ejercicio": "Prensa de piernas",
+   "archivo": "Leg Press 2.jpg",
+   "autor": "SAgbley",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Leg_Press_2.jpg"
+  },
+  "extension-de-cuadriceps": {
+   "ejercicio": "Extensión de cuádriceps",
+   "archivo": "LegExtensionMachineExercise.JPG",
+   "autor": "No machine-readable author provided. GeorgeStepanek assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:LegExtensionMachineExercise.JPG"
+  },
+  "curl-femoral-tumbado": {
+   "ejercicio": "Curl femoral tumbado",
+   "archivo": "LyingLegCurlMachineExercise.JPG",
+   "autor": "No machine-readable author provided. GeorgeStepanek assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:LyingLegCurlMachineExercise.JPG"
+  },
+  "curl-femoral-sentado": {
+   "ejercicio": "Curl femoral sentado",
+   "archivo": "Seated-leg-curl-1.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Seated-leg-curl-1.png"
+  },
+  "peso-muerto-rumano": {
+   "ejercicio": "Peso muerto rumano",
+   "archivo": "Romanian-deadlift-2.png",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Romanian-deadlift-2.png"
+  },
+  "zancadas-con-mancuernas": {
+   "ejercicio": "Zancadas con mancuernas",
+   "archivo": "U.S. Army Sgt. 1st Class Ricky Irvin works his way toward the finish line.jpg",
+   "autor": "U.S. Department of Defense Current Photos",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:U.S._Army_Sgt._1st_Class_Ricky_Irvin_works_his_way_toward_the_finish_line.jpg"
+  },
+  "bulgaras": {
+   "ejercicio": "Búlgaras",
+   "archivo": "Jumping split squat with dumbbells 1.png",
+   "autor": "RickyBennison",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Jumping_split_squat_with_dumbbells_1.png"
+  },
+  "elevacion-de-gemelos": {
+   "ejercicio": "Elevación de gemelos",
+   "archivo": "SeatedCalfRaiseMachineExercise.JPG",
+   "autor": "George Stepanek",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:SeatedCalfRaiseMachineExercise.JPG"
+  },
+  "hack-squat": {
+   "ejercicio": "Hack squat",
+   "archivo": "HackSquatMachineExercise.JPG",
+   "autor": "No machine-readable author provided. GeorgeStepanek assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:HackSquatMachineExercise.JPG"
+  },
+  "hip-thrust": {
+   "ejercicio": "Hip thrust",
+   "archivo": "Glute-bridge.png",
+   "autor": "Marianne Gilbak",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Glute-bridge.png"
+  },
+  "abductores-en-maquina": {
+   "ejercicio": "Abductores en máquina",
+   "archivo": "Hip abductor machine.jpg",
+   "autor": "Teemeah",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Hip_abductor_machine.jpg"
+  },
+  "aductores-en-maquina": {
+   "ejercicio": "Aductores en máquina",
+   "archivo": "Thigh-adductor-1.gif",
+   "autor": "Everkinetic",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Thigh-adductor-1.gif"
+  },
+  "puente-de-gluteo": {
+   "ejercicio": "Puente de glúteo",
+   "archivo": "Single Leg Bridge.jpg",
+   "autor": "Klewis425",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Single_Leg_Bridge.jpg"
+  },
+  "crunch-abdominal": {
+   "ejercicio": "Crunch abdominal",
+   "archivo": "Sit-up with weight.jpg",
+   "autor": "embhoo",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Sit-up_with_weight.jpg"
+  },
+  "crunch-en-polea": {
+   "ejercicio": "Crunch en polea",
+   "archivo": "JTF Pumping Iron DVIDS204608.jpg",
+   "autor": "Sgt. Carmen Steinbach",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:JTF_Pumping_Iron_DVIDS204608.jpg"
+  },
+  "elevacion-de-piernas-colgado": {
+   "ejercicio": "Elevación de piernas colgado",
+   "archivo": "Alexandr Varlamov ,Italia.jpg",
+   "autor": "Alexandr Varlamov",
+   "licencia": "CC BY-SA 4.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Alexandr_Varlamov_,Italia.jpg"
+  },
+  "plancha": {
+   "ejercicio": "Plancha",
+   "archivo": "Plank.jpg",
+   "autor": "Jaykayfit",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Plank.jpg"
+  },
+  "rueda-abdominal": {
+   "ejercicio": "Rueda abdominal",
+   "archivo": "Woman doing exercises with an ab wheel and ankle weights on a yoga mat in the park. (51540571665).jpg",
+   "autor": "Nenad Stojkovic",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Woman_doing_exercises_with_an_ab_wheel_and_ankle_weights_on_a_yoga_mat_in_the_park._(51540571665).jpg"
+  },
+  "giro-ruso": {
+   "ejercicio": "Giro ruso",
+   "archivo": "1st MLG Marines and Sailors participate in the Artemis Program (8716483).jpg",
+   "autor": "U.S. Marine Corps photo by Lance Cpl. Christian McGinnis",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:1st_MLG_Marines_and_Sailors_participate_in_the_Artemis_Program_(8716483).jpg"
+  },
+  "cinta-de-correr": {
+   "ejercicio": "Cinta de correr",
+   "archivo": "Young man running on treadmill during sports training in a gym.jpg",
+   "autor": "Nenad Stojkovic",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Young_man_running_on_treadmill_during_sports_training_in_a_gym.jpg"
+  },
+  "bicicleta-estatica": {
+   "ejercicio": "Bicicleta estática",
+   "archivo": "Exercise bike - 29792771184 - 2016-10-19.jpg",
+   "autor": "TChapman9",
+   "licencia": "CC BY 2.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Exercise_bike_-_29792771184_-_2016-10-19.jpg"
+  },
+  "eliptica": {
+   "ejercicio": "Elíptica",
+   "archivo": "Elliptical machine.jpg",
+   "autor": "No machine-readable author provided. Cpetro45 assumed (based on copyright claims).",
+   "licencia": "CC BY-SA 3.0",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Elliptical_machine.jpg"
+  },
+  "remo-ergometro": {
+   "ejercicio": "Remo (ergómetro)",
+   "archivo": "Concept 2 Indoor Rowers.JPG",
+   "autor": "desconocido",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Concept_2_Indoor_Rowers.JPG"
+  },
+  "escaladora": {
+   "ejercicio": "Escaladora",
+   "archivo": "Man on stair machine.jpg",
+   "autor": "Ernie Branson (Photographer)",
+   "licencia": "Public domain",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Man_on_stair_machine.jpg"
+  }
+ }
+}

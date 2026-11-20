@@ -1,0 +1,2901 @@
+/* =============================================================================
+ * app.css — Sistema de diseño de la app del gimnasio.  v2 (27-ago-2026)
+ *
+ * PARA QUIÉN ESTÁ HECHA
+ * ---------------------
+ * Para usarse DE PIE, CON PRISA, CON UNA MANO Y CON LAS MANOS SUDADAS, en un
+ * sótano con luz de tubo a las siete de la mañana. Todo lo demás viene de ahí:
+ *
+ *  · Oscuro de fábrica. Modo claro incluido, y dos temas más.
+ *  · Nada por debajo de 44 px de zona táctil. Tampoco los iconos.
+ *  · Lo que se pulsa, abajo, al alcance del pulgar.
+ *  · Tipografía del sistema: cero peticiones a internet, funciona sin cobertura.
+ *  · Iconos SVG, NUNCA emojis: un emoji cambia de dibujo en cada móvil y no se
+ *    puede teñir con los tokens.
+ *  · Colores de datos validados para daltonismo y contraste (ver graficas.js).
+ *
+ * LOS TOKENS VAN EN TRES CAPAS
+ * ----------------------------
+ *   primitivo   el valor crudo          --azul-500: #3987e5
+ *   semántico   para qué sirve          --acento: var(--azul-500)
+ *   componente  quién lo usa            --boton-fondo: var(--acento)
+ *
+ * Si un componente necesita una excepción de color en modo claro, es que hay un
+ * color a pelo en algún sitio. Eso es el error, no la excepción.
+ *
+ * EL MOVIMIENTO TAMBIÉN ES UN TOKEN
+ * ---------------------------------
+ * Dos familias, y ninguna decorativa:
+ *   PASIVO  lo que pasa solo: las filas entran escalonadas, los números suben
+ *           hasta su valor, las barras crecen desde cero, el récord destella.
+ *           Sirve para que se entienda de dónde sale cada cosa.
+ *   ACTIVO  lo que responde al dedo: hundido al pulsar, hojas que suben con
+ *           rebote corto, cambio de vista con desplazamiento.
+ *           Sirve para saber que el toque ha llegado.
+ *
+ * Todo respeta `prefers-reduced-motion`. Y nada anima `width`, `top` o `left`:
+ * solo `transform` y `opacity`, que son las dos que no obligan al móvil a
+ * recalcular la página en cada fotograma.
+ * ========================================================================== */
+
+/* ===========================================================================
+ * 1. PRIMITIVOS
+ * ========================================================================= */
+:root {
+  /* — grises azulados: la base — */
+  --gris-950: #090b0f;
+  --gris-900: #0e1116;
+  --gris-850: #141821;
+  --gris-800: #1a1f29;
+  --gris-750: #222834;
+  --gris-700: #2c3340;
+  --gris-500: #6b7683;
+  --gris-300: #a8b3c2;
+  --gris-100: #e6ebf2;
+  --gris-050: #f2f5f9;
+  --blanco: #ffffff;
+
+  /* — color — */
+  --azul-600: #2a78d6;
+  --azul-500: #3987e5;
+  --azul-400: #5ba3f5;
+  --verde-500: #199e70;
+  --ambar-500: #c98500;
+  --rojo-500: #e66767;
+  --rojo-600: #e5484d;
+  --naranja-500: #d95926;
+  --rosa-500: #d55181;
+
+  /* — geometría — */
+  --r-xs: 8px;
+  --r-s: 12px;
+  --r-m: 18px;
+  --r-l: 26px;
+  --r-full: 999px;
+
+  /* — ritmo: rejilla de 4 — */
+  --e1: 4px;
+  --e2: 8px;
+  --e3: 12px;
+  --e4: 16px;
+  --e5: 24px;
+  --e6: 32px;
+  --e7: 48px;
+
+  /* — tipografía: cuatro tamaños de texto y uno de cifra — */
+  --t-xs: 0.75rem;
+  --t-s: 0.875rem;
+  --t-m: 1rem;
+  --t-l: 1.375rem;
+  --t-cifra: 2.6rem;
+  --fuente: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* — tiempo — */
+  --v-rapido: 120ms;
+  --v-normal: 220ms;
+  --v-lento: 420ms;
+  --curva: cubic-bezier(0.4, 0, 0.2, 1);
+  --curva-salida: cubic-bezier(0.16, 1, 0.3, 1);
+  --curva-rebote: cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+
+/* ===========================================================================
+ * 2. SEMÁNTICOS — el tema oscuro es el de fábrica
+ * ========================================================================= */
+:root {
+  color-scheme: dark;
+
+  --fondo: var(--gris-900);
+  --fondo-hondo: var(--gris-950);
+  --superficie: var(--gris-850);
+  --superficie-2: var(--gris-800);
+  --superficie-3: var(--gris-750);
+  --borde: var(--gris-700);
+  --borde-tenue: rgba(255, 255, 255, 0.06);
+  --brillo: rgba(255, 255, 255, 0.07); /* filo de luz de las tarjetas */
+  --velo: rgba(9, 11, 15, 0.72); /* fondo de las hojas y del cristal */
+
+  --texto: var(--gris-050);
+  --texto-2: var(--gris-300);
+  --texto-tenue: var(--gris-500);
+
+  --acento: var(--azul-500);
+  --acento-vivo: var(--azul-400);
+  --acento-tinta: var(--blanco);
+  --acento-suave: rgba(57, 135, 229, 0.16);
+  --acento-halo: rgba(57, 135, 229, 0.34);
+
+  --bien: var(--verde-500);
+  --aviso: var(--ambar-500);
+  --mal: var(--rojo-500);
+  --musculo: var(--rojo-600);
+
+  /* series de datos — paleta validada, NO se toca por tema */
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --serie-5: #d55181;
+
+  /* profundidad: tres alturas y ni una más */
+  --alt-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --alt-2: 0 4px 16px -4px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --alt-3: 0 18px 44px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.45);
+
+  --nav-alto: 66px;
+  --cab-alto: 56px;
+
+  /* compatibilidad con lo que ya existía */
+  --radio: var(--r-m);
+  --radio-s: var(--r-s);
+  --sombra: var(--alt-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * TEMAS
+ *
+ * Cuatro: oscuro (arriba, el de fábrica), claro, rosa y «el tuyo».
+ *
+ * Lo que un tema PUEDE cambiar: superficies, tinta y acento.
+ * Lo que un tema NO cambia NUNCA: los colores de los DATOS (--serie-N) más allá
+ * de su versión clara/oscura. Están elegidos con el validador de daltonismo y
+ * contraste; dejar que se elijan a ojo sería tirar esa garantía a la basura, y
+ * dos series que no se distinguen convierten la gráfica en un adorno.
+ *
+ * El tema «propio» reutiliza la base clara o la oscura (data-base) y solo pisa
+ * el acento, que se inyecta como estilo en línea desde JS.
+ * ------------------------------------------------------------------------- */
+:root[data-tema='claro'],
+:root[data-tema='propio'][data-base='claro'] {
+  color-scheme: light;
+  --fondo: #eef1f6;
+  --fondo-hondo: #e3e8ef;
+  --superficie: #ffffff;
+  --superficie-2: #f4f6fa;
+  --superficie-3: #e9edf3;
+  --borde: #dde2e9;
+  --borde-tenue: rgba(15, 20, 27, 0.07);
+  --brillo: rgba(255, 255, 255, 0.9);
+  --velo: rgba(238, 241, 246, 0.78);
+  --texto: #0f141b;
+  --texto-2: #4c5764;
+  --texto-tenue: #8a94a1;
+  --acento: var(--azul-600);
+  --acento-vivo: var(--azul-500);
+  --acento-tinta: #ffffff;
+  --acento-suave: rgba(42, 120, 214, 0.12);
+  --acento-halo: rgba(42, 120, 214, 0.26);
+  --bien: #1baf7a;
+  --aviso: #eda100;
+  --mal: #e34948;
+  --musculo: #d93a3f;
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
+  --serie-5: #e87ba4;
+  --alt-1: 0 1px 2px rgba(15, 20, 27, 0.06);
+  --alt-2: 0 4px 14px -4px rgba(15, 20, 27, 0.12), 0 1px 2px rgba(15, 20, 27, 0.06);
+  --alt-3: 0 18px 40px -12px rgba(15, 20, 27, 0.22), 0 2px 8px rgba(15, 20, 27, 0.1);
+}
+
+/* Rosa: el mismo rosa con el que JARVIS marca a Garbancito en el HUD
+   (#ff9ec7). Base oscura y superficies con un punto de ciruela, para que el
+   rosa no flote sobre un gris neutro. La tinta del acento es OSCURA a
+   propósito: blanco sobre #ff9ec7 da 1,9:1 y no se lee. */
+:root[data-tema='rosa'] {
+  color-scheme: dark;
+  --fondo: #14090f;
+  --fondo-hondo: #0d0509;
+  --superficie: #1f1119;
+  --superficie-2: #2b1823;
+  --superficie-3: #37202d;
+  --borde: #3f2434;
+  --borde-tenue: rgba(255, 255, 255, 0.07);
+  --brillo: rgba(255, 200, 224, 0.1);
+  --velo: rgba(13, 5, 9, 0.74);
+  --texto: #fdf1f7;
+  --texto-2: #d4b3c5;
+  --texto-tenue: #977a89;
+  --acento: #ff9ec7;
+  --acento-vivo: #ffb8d6;
+  --acento-tinta: #2a0a18;
+  --acento-suave: rgba(255, 158, 199, 0.16);
+  --acento-halo: rgba(255, 158, 199, 0.34);
+}
+
+/* ===========================================================================
+ * 3. BASE
+ * ========================================================================= */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  /* 17,5 px y no los 16 de fábrica. Carlos, 30-jul-2026: «el formato es
+     pequeño». Como casi todo va en `rem`, subir la base sube la app entera un
+     9 %. El rediseño lo perdió sin querer y la comprobación del APK lo cazó. */
+  font-size: 17.5px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--fuente);
+  font-size: var(--t-m);
+  line-height: 1.45;
+  color: var(--texto);
+  background: var(--fondo);
+  /* Un halo muy tenue del acento arriba: da profundidad sin costar nada.
+     `fixed` para que no se mueva con el scroll y no repinte. */
+  background-image: radial-gradient(120% 60% at 50% -10%, var(--acento-suave), transparent 62%);
+  background-attachment: fixed;
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Cifras siempre de ancho fijo: si no, el peso «baila» al cambiar de 9 a 10. */
+.contador-numero,
+.maquina-peso,
+.gl-valor,
+.metrica-valor,
+.nut-kcal,
+.historial-peso,
+.plan-cuenta,
+.g-etiqueta,
+.macro-cifra,
+.volumen-valor {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* El foco se ve SIEMPRE. Es lo primero que se quita «porque afea» y lo primero
+   que se echa de menos cuando se usa el móvil con un teclado o con TalkBack. */
+:focus-visible {
+  outline: 2px solid var(--acento-vivo);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+::selection {
+  background: var(--acento-suave);
+}
+
+/* ===========================================================================
+ * 4. MOVIMIENTO — el catálogo entero, en un sitio
+ * ========================================================================= */
+@keyframes aparece {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes entra {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sube {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes late {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.06);
+  }
+}
+@keyframes destella {
+  0% {
+    box-shadow: 0 0 0 0 var(--acento-halo);
+  }
+  70% {
+    box-shadow: 0 0 0 12px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes barrido {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(300%, 0, 0);
+  }
+}
+@keyframes gira {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes crece {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* La entrada escalonada: cada fila llega un pelín después que la anterior. El
+   retraso lo pone JS con `--i`, y se corta a las 14 para que una lista de 300
+   máquinas no tarde nueve segundos en aparecer. */
+.entra {
+  animation: entra var(--v-lento) var(--curva-salida) both;
+  animation-delay: calc(min(var(--i, 0), 14) * 26ms);
+}
+
+/* NADA de esto se mueve si el sistema pide que no se mueva. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===========================================================================
+ * 5. ARMAZÓN — cabecera, vista y navegación
+ * ========================================================================= */
+.cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: max(env(safe-area-inset-top), 6px) var(--e4) var(--e2);
+  /* El cristal SOLO aquí y en la barra de abajo: son dos franjas pequeñas y
+     fijas. Ponerlo en las filas de una lista larga es lo que hace que el scroll
+     raspe en un móvil normal. */
+  background: var(--velo);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border-bottom: 1px solid var(--borde-tenue);
+}
+
+.cabecera-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  min-height: 44px;
+}
+
+.titulo-vista {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--t-l);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estado-sync {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.estado-sync::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: currentColor;
+  flex: none;
+}
+.estado-sync.ok {
+  color: var(--bien);
+}
+.estado-sync.pendiente {
+  color: var(--aviso);
+}
+.estado-sync.pendiente::before {
+  animation: late 1.6s var(--curva) infinite;
+}
+
+.selector-gym {
+  max-width: 42vw;
+  min-height: 44px;
+  padding: 0 var(--e5) 0 var(--e3);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-full);
+  background: var(--superficie-2)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8b3c2' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 8px center / 16px;
+  appearance: none;
+  font-size: var(--t-s);
+  font-weight: 600;
+  color: var(--texto);
+  text-overflow: ellipsis;
+}
+
+.vista {
+  display: block;
+  padding: var(--e4) var(--e4) calc(var(--nav-alto) + env(safe-area-inset-bottom) + var(--e6));
+  max-width: 720px;
+  margin: 0 auto;
+  animation: entra var(--v-normal) var(--curva-salida);
+}
+
+.nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--e1);
+  padding: 6px var(--e2) calc(6px + env(safe-area-inset-bottom));
+  background: var(--velo);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--borde-tenue);
+}
+
+.nav-boton {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 54px;
+  padding: var(--e1) 2px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--texto-tenue);
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: color var(--v-rapido) var(--curva), transform var(--v-rapido) var(--curva);
+}
+.nav-boton svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--v-normal) var(--curva-rebote);
+}
+.nav-boton:active {
+  transform: scale(0.92);
+}
+.nav-boton[aria-current='page'] {
+  color: var(--acento);
+}
+.nav-boton[aria-current='page'] svg {
+  stroke-width: 2.3;
+  transform: translateY(-2px);
+}
+/* La pastilla que marca dónde estás. Se dibuja detrás del icono y crece al
+   entrar: sin ella, el único indicador sería el color, y el color solo no vale. */
+.nav-boton[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  width: 40px;
+  height: 30px;
+  border-radius: var(--r-full);
+  background: var(--acento-suave);
+  animation: aparece var(--v-normal) var(--curva);
+}
+
+/* ===========================================================================
+ * 6. PIEZAS SUELTAS
+ * ========================================================================= */
+
+/* — tarjeta: la base de casi todo — */
+.ficha,
+.plan,
+.objetivo,
+.analisis,
+.grafica,
+.nut-seccion,
+.sitio,
+.dir,
+.credito,
+.tema {
+  position: relative;
+  background: var(--superficie);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-m);
+  box-shadow: var(--alt-1);
+}
+/* El filo de luz de arriba. Es lo que separa una tarjeta de un rectángulo. */
+.ficha::before,
+.plan::before,
+.objetivo::before,
+.grafica::before,
+.nut-seccion::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: var(--r-m) var(--r-m) 0 0;
+  background: linear-gradient(90deg, transparent, var(--brillo) 30%, var(--brillo) 70%, transparent);
+  pointer-events: none;
+}
+
+.ficha {
+  padding: var(--e4);
+  margin-bottom: var(--e3);
+}
+
+.ficha-titulo,
+.seccion-titulo,
+.objetivo-titulo,
+.nut-repetir-titulo {
+  margin: 0 0 var(--e3);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+}
+.seccion-titulo {
+  margin: var(--e5) 0 var(--e2);
+}
+
+/* — botones — */
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--e4);
+  border: 0;
+  border-radius: var(--r-s);
+  background: var(--acento);
+  color: var(--acento-tinta);
+  font-size: var(--t-m);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  /* El filo claro de arriba hace que el botón parezca una tecla y no un
+     rectángulo pintado. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), var(--alt-2);
+  transition: transform var(--v-rapido) var(--curva), filter var(--v-rapido) var(--curva),
+    box-shadow var(--v-rapido) var(--curva);
+}
+.boton:active:not(:disabled) {
+  transform: scale(0.975);
+  filter: brightness(0.94);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), var(--alt-1);
+}
+.boton:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.boton-2 {
+  background: var(--superficie-2);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  box-shadow: none;
+}
+.boton-2:active:not(:disabled) {
+  background: var(--superficie-3);
+}
+
+.boton-peligro {
+  background: transparent;
+  color: var(--mal);
+  border: 1px solid var(--mal);
+  box-shadow: none;
+}
+
+.boton-plano {
+  min-height: 44px;
+  padding: 0 var(--e3);
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--acento);
+  font-size: var(--t-s);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--v-rapido) var(--curva);
+}
+.boton-plano:active {
+  background: var(--acento-suave);
+}
+
+.botonera {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  margin-top: var(--e3);
+}
+.botonera .boton {
+  margin: 0;
+}
+
+/* — chips de filtro — */
+.chips {
+  display: flex;
+  gap: var(--e2);
+  padding: var(--e1) var(--e4);
+  margin: 0 calc(var(--e4) * -1) var(--e3);
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.chips::-webkit-scrollbar {
+  display: none;
+}
+.chips-compacto {
+  margin-bottom: var(--e2);
+}
+
+.chip {
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--e4);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-full);
+  background: var(--superficie);
+  color: var(--texto-2);
+  font-size: var(--t-s);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: transform var(--v-rapido) var(--curva), background var(--v-rapido) var(--curva),
+    color var(--v-rapido) var(--curva), border-color var(--v-rapido) var(--curva);
+}
+.chip:active {
+  transform: scale(0.94);
+}
+.chip[aria-pressed='true'] {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--acento-tinta);
+}
+.chip-mas {
+  color: var(--acento);
+  border-style: dashed;
+}
+.chip-explica {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+  margin: calc(var(--e2) * -1) 0 var(--e3);
+}
+
+/* — buscador — */
+.buscador {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 var(--e4) 0 var(--e7);
+  margin-bottom: var(--e3);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-full);
+  background: var(--superficie)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7683' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E")
+    no-repeat left 15px center / 19px;
+  font-size: var(--t-m);
+  color: var(--texto);
+  transition: border-color var(--v-rapido) var(--curva), box-shadow var(--v-rapido) var(--curva);
+}
+.buscador::placeholder {
+  color: var(--texto-tenue);
+}
+.buscador:focus {
+  outline: 0;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px var(--acento-suave);
+}
+
+/* — campos — */
+.campo {
+  display: block;
+  margin-bottom: var(--e3);
+}
+.campo label,
+.etiqueta-grupo,
+.etiqueta-foto {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--texto-2);
+}
+.campo input,
+.campo select,
+.campo textarea {
+  width: 100%;
+  min-height: 50px;
+  padding: var(--e3);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  font-size: var(--t-m);
+  transition: border-color var(--v-rapido) var(--curva), box-shadow var(--v-rapido) var(--curva);
+}
+.campo textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.campo input:focus,
+.campo select:focus,
+.campo textarea:focus {
+  outline: 0;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px var(--acento-suave);
+}
+.campo-fila {
+  display: flex;
+  gap: var(--e2);
+}
+.campo-fila > * {
+  flex: 1;
+}
+.campo-nota {
+  margin: 6px 0 0;
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+  line-height: 1.4;
+}
+
+/* — insignias — */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--superficie-3);
+  color: var(--texto-2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+/* El punto de color va ADEMÁS del texto, nunca en vez del texto. */
+.badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-full);
+  background: currentColor;
+}
+.badge-record {
+  background: color-mix(in srgb, var(--bien) 20%, transparent);
+  color: var(--bien);
+}
+.badge-estancada {
+  background: color-mix(in srgb, var(--aviso) 20%, transparent);
+  color: var(--aviso);
+}
+.badge-hecho {
+  background: var(--acento-suave);
+  color: var(--acento-vivo);
+}
+
+/* — estados vacíos: siempre con salida — */
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e7) var(--e4);
+  text-align: center;
+  color: var(--texto-2);
+  animation: entra var(--v-lento) var(--curva-salida);
+}
+.vacio p {
+  margin: 0;
+  max-width: 34ch;
+  line-height: 1.55;
+}
+.vacio .boton {
+  width: auto;
+  min-width: 200px;
+}
+.vacio-icono {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: var(--r-full);
+  background: var(--acento-suave);
+  color: var(--acento);
+}
+.vacio-icono svg {
+  width: 34px;
+  height: 34px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* — cargando: «todavía no lo sé» NO es lo mismo que «no hay nada» — */
+.cargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+  padding: var(--e6);
+  color: var(--texto-tenue);
+  font-size: var(--t-s);
+}
+.cargando::before {
+  content: '';
+  width: 17px;
+  height: 17px;
+  border: 2px solid var(--borde);
+  border-top-color: var(--acento);
+  border-radius: var(--r-full);
+  animation: gira 0.7s linear infinite;
+}
+
+/* — aviso flotante — */
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--nav-alto) + env(safe-area-inset-bottom) + var(--e3));
+  z-index: 90;
+  max-width: min(92vw, 420px);
+  padding: var(--e3) var(--e4);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-s);
+  background: var(--superficie-3);
+  box-shadow: var(--alt-3);
+  font-size: var(--t-s);
+  font-weight: 600;
+  text-align: center;
+  transform: translate(-50%, 0);
+  animation: entra var(--v-normal) var(--curva-rebote);
+}
+
+.oculto {
+  display: none !important;
+}
+
+/* ===========================================================================
+ * 7. HOJA INFERIOR — donde pasa casi todo
+ *
+ * Sube desde abajo con un rebote corto. SUBE, no aparece: el gesto cuenta de
+ * dónde viene la pantalla y a dónde vuelve al cerrarla.
+ * ========================================================================= */
+.hoja-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--velo);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: aparece var(--v-normal) var(--curva);
+}
+
+.hoja {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  max-height: 92dvh;
+  border-radius: var(--r-l) var(--r-l) 0 0;
+  background: var(--superficie);
+  border-top: 1px solid var(--brillo);
+  box-shadow: var(--alt-3);
+  animation: sube var(--v-lento) var(--curva-salida);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (min-width: 640px) {
+  .hoja {
+    left: 50%;
+    right: auto;
+    bottom: var(--e5);
+    width: 620px;
+    transform: translateX(-50%);
+    border-radius: var(--r-l);
+  }
+}
+
+.hoja-asa {
+  flex: none;
+  width: 42px;
+  height: 4px;
+  margin: var(--e2) auto 0;
+  border-radius: var(--r-full);
+  background: var(--borde);
+}
+
+.hoja-cabecera {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3) var(--e4);
+  border-bottom: 1px solid var(--borde-tenue);
+}
+
+.hoja-titulo {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--t-l);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hoja-cuerpo {
+  flex: 1;
+  min-height: 0;
+  padding: var(--e4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===========================================================================
+ * 8. CONTADOR — poner el peso y las reps con el pulgar
+ *
+ * Los botones son grandes a propósito: se usan con las manos sudadas y sin
+ * mirar. El número es lo más grande de la pantalla porque el número es el dato.
+ * ========================================================================= */
+.contador {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  margin-bottom: var(--e4);
+}
+
+.contador-boton {
+  flex: none;
+  width: 62px;
+  height: 62px;
+  border: 1px solid var(--borde);
+  border-radius: var(--r-m);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font-size: 1.6rem;
+  font-weight: 300;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform var(--v-rapido) var(--curva), background var(--v-rapido) var(--curva);
+}
+.contador-boton:active {
+  transform: scale(0.9);
+  background: var(--acento-suave);
+  border-color: var(--acento);
+}
+
+.contador-valor {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+.contador-numero {
+  display: block;
+  font-size: var(--t-cifra);
+  font-weight: 800;
+  line-height: 1.05;
+}
+.contador-unidad {
+  font-size: var(--t-s);
+  font-weight: 600;
+  color: var(--texto-tenue);
+}
+.contador-etiqueta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+}
+
+.pista-anterior {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  font-size: var(--t-s);
+  color: var(--texto-2);
+}
+
+/* ===========================================================================
+ * 9. LISTA DE MÁQUINAS — la pantalla donde se vive
+ * ========================================================================= */
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+}
+
+.maquina {
+  position: relative;
+  display: grid;
+  grid-template-columns: 60px 1fr 52px;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e2);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-m);
+  background: var(--superficie);
+  box-shadow: var(--alt-1);
+  overflow: hidden;
+  animation: entra var(--v-lento) var(--curva-salida) both;
+  animation-delay: calc(min(var(--i, 0), 14) * 26ms);
+  transition: transform var(--v-rapido) var(--curva);
+}
+.maquina:active {
+  transform: scale(0.99);
+}
+
+/* El hueco de la imagen: foto real, figura animada o pictograma, en ese orden. */
+.maquina-foto {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-s);
+  background: var(--superficie-3);
+  object-fit: cover;
+  overflow: hidden;
+  cursor: pointer;
+}
+.maquina-foto .ej-foto,
+.maquina-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.maquina-foto .an-fig {
+  width: 100%;
+  height: 100%;
+}
+
+.maquina-cuerpo {
+  min-width: 0;
+  padding: var(--e2) 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.maquina-nombre {
+  overflow: hidden;
+  font-size: var(--t-m);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--texto);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.maquina-ultimo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: var(--t-s);
+  color: var(--texto-2);
+}
+.maquina-peso {
+  font-weight: 800;
+  color: var(--texto);
+}
+.maquina-cuando {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.maquina-sin {
+  margin-top: 3px;
+  font-size: var(--t-s);
+  color: var(--texto-tenue);
+}
+.maquina-pict {
+  display: block;
+  width: 62%;
+  height: 62%;
+}
+.maquina-pict svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* La barra de carga: dónde queda el último peso respecto a tu récord. Es la
+   única pieza que cuenta la historia entera sin abrir nada. Crece al entrar. */
+.maquina-carga {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--superficie-3);
+}
+/* El relleno va en un pseudo para que se vea el CARRIL detrás: sin carril, una
+   barra a media altura y otra al 100 % se leen igual de «llena». */
+.maquina-carga::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--acento), var(--acento-vivo));
+  opacity: 0.7;
+  transform: scaleX(var(--carga, 0));
+  transform-origin: left;
+  animation: crece var(--v-lento) var(--curva-salida) both;
+  animation-delay: 160ms;
+}
+
+.boton-anadir {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: var(--acento-suave);
+  color: var(--acento);
+  font-size: 1.6rem;
+  font-weight: 300;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform var(--v-rapido) var(--curva), background var(--v-rapido) var(--curva);
+}
+.boton-anadir:active {
+  transform: scale(0.88);
+  background: var(--acento);
+  color: var(--acento-tinta);
+}
+
+/* ===========================================================================
+ * 10. PLAN DE HOY
+ * ========================================================================= */
+.plan {
+  padding: var(--e4);
+  margin-bottom: var(--e4);
+}
+.plan-cabeza {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+}
+.plan-dia {
+  flex: 1;
+  font-size: var(--t-l);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.plan-cuenta {
+  font-size: var(--t-s);
+  font-weight: 700;
+  color: var(--texto-2);
+}
+.plan-etiqueta {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--acento);
+}
+/* `.plan-barra` es el CARRIL y la `<i>` de dentro es el relleno: así lo pinta
+   app.js, y se comprueba mirando el DOM, no suponiéndolo. */
+.plan-barra {
+  height: 6px;
+  margin-bottom: 6px;
+  border-radius: var(--r-full);
+  background: var(--superficie-3);
+  overflow: hidden;
+}
+.plan-barra > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--acento), var(--acento-vivo));
+  transition: width var(--v-lento) var(--curva-salida);
+}
+.plan-progreso {
+  margin-bottom: var(--e3);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--texto-2);
+}
+/* `.plan-cuerpo` es el BOTÓN de dentro de cada fila, no el contenedor de las
+   filas. Sin el reset del <button> cada fila se encogía a su contenido y salía
+   una escalera: se comprobó mirando el DOM y la captura, no suponiéndolo. */
+.plan-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  padding: var(--e2);
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-detalle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* El título y el día ocupan lo que sobra; «Cambiar» se va a la derecha. */
+.plan-cabeza > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.plan-fila {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--e3);
+  min-height: 52px;
+  padding: var(--e2);
+  border: 0;
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--v-rapido) var(--curva), background var(--v-rapido) var(--curva);
+}
+.plan-fila:active {
+  transform: scale(0.985);
+  background: var(--superficie-3);
+}
+.plan-nombre {
+  overflow: hidden;
+  font-size: var(--t-s);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-detalle,
+.plan-ultimo,
+.plan-objetivo {
+  font-size: var(--t-xs);
+  color: var(--texto-2);
+}
+.plan-hecha {
+  opacity: 0.55;
+}
+.plan-hecha .plan-nombre {
+  text-decoration: line-through;
+}
+/* Los puntos de series: cuántas llevas de las que tocan, de un vistazo. */
+.plan-puntos {
+  display: flex;
+  gap: 4px;
+}
+.ps-punto {
+  width: 9px;
+  height: 9px;
+  border: 1.6px solid var(--borde);
+  border-radius: var(--r-full);
+}
+.ps-hecha {
+  background: var(--acento);
+  border-color: var(--acento);
+  animation: late var(--v-lento) var(--curva-rebote);
+}
+
+/* ===========================================================================
+ * 11. CATÁLOGO — 1.365 ejercicios
+ * ========================================================================= */
+.catalogo-rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(102px, 1fr));
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+}
+
+.cat-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 132px;
+  padding: var(--e2) 6px;
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  cursor: pointer;
+  transition: transform var(--v-rapido) var(--curva), border-color var(--v-rapido) var(--curva),
+    background var(--v-rapido) var(--curva);
+}
+.cat-item:active {
+  transform: scale(0.95);
+}
+.cat-item[aria-pressed='true'] {
+  border-color: var(--acento);
+  background: var(--acento-suave);
+}
+/* La marca de elegido es un TIC, no solo un borde de color: el color a secas no
+   se ve con daltonismo ni con el móvil al sol. */
+.cat-item[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--acento)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12l6 6L20 6'/%3E%3C/svg%3E")
+    no-repeat center / 12px;
+  animation: late var(--v-normal) var(--curva-rebote);
+}
+.cat-item-repe {
+  opacity: 0.5;
+}
+
+.cat-medallon {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: var(--r-s);
+  background: var(--superficie-3);
+  overflow: hidden;
+}
+.cat-medallon .ej-foto,
+.cat-medallon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cat-medallon .an-fig {
+  width: 100%;
+  height: 100%;
+}
+.cat-pict {
+  display: block;
+  width: 60%;
+  height: 60%;
+}
+.cat-pict svg {
+  width: 100%;
+  height: 100%;
+}
+.cat-nombre {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--texto);
+  text-align: center;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.cat-grupo {
+  font-size: 0.64rem;
+  color: var(--texto-tenue);
+}
+/* Cuántos quedan por pintar. Con 1.365 ejercicios la lista se pinta a trozos:
+   pintarlos todos de golpe bloquea el hilo casi un segundo en un móvil normal. */
+.cat-mas {
+  grid-column: 1 / -1;
+}
+
+/* ===========================================================================
+ * 12. FICHA DE EJERCICIO — la figura, la técnica y el historial
+ * ========================================================================= */
+
+/* El escenario de la animación: la figura grande, centrada, sobre un fondo
+   propio para que se despegue de la tarjeta. */
+.ej-escena {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 208px;
+  margin-bottom: var(--e3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-m);
+  background: radial-gradient(70% 70% at 50% 40%, var(--superficie-2), var(--superficie));
+  overflow: hidden;
+}
+/* Ancho y alto al 100 %: el `preserveAspectRatio="xMidYMid meet"` del SVG ya
+   encaja la figura dentro sin deformarla. Con `width:auto` el navegador le da
+   el ancho del contenedor y calcula el alto por la proporción — 427 px dentro
+   de una caja de 208 — y solo se veía una franja del medio. */
+.ej-escena .an-fig {
+  width: 100%;
+  height: 100%;
+}
+.ej-escena img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* El músculo que trabaja. El nombre va SIEMPRE, el color es el acompañante. */
+.ej-musculo {
+  position: absolute;
+  left: var(--e3);
+  bottom: var(--e3);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-full);
+  background: var(--velo);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--texto);
+}
+.ej-musculo::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-full);
+  background: var(--musculo);
+  animation: late 2.6s var(--curva) infinite;
+}
+
+/* Botón de pausa de la animación, arriba a la derecha del escenario. */
+.ej-pausa {
+  position: absolute;
+  top: var(--e2);
+  right: var(--e2);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-full);
+  background: var(--velo);
+  color: var(--texto-2);
+  cursor: pointer;
+}
+.ej-pausa svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.ej-quieta .an-fig * {
+  animation-play-state: paused !important;
+}
+
+/* Los pasos de la técnica. Numerados porque SON una secuencia: el orden es
+   parte de la información, no un adorno. */
+.ej-pasos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: paso;
+}
+.ej-pasos li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: var(--e3);
+  font-size: var(--t-s);
+  line-height: 1.5;
+  color: var(--texto-2);
+}
+.ej-pasos li::before {
+  counter-increment: paso;
+  content: counter(paso);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-full);
+  background: var(--acento-suave);
+  color: var(--acento);
+  font-size: var(--t-xs);
+  font-weight: 800;
+}
+
+.ficha-sinfoto {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-m);
+  background: var(--superficie-2);
+}
+.ficha-sinfoto-img {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 76px;
+  height: 76px;
+  border-radius: var(--r-s);
+  background: var(--superficie-3);
+  overflow: hidden;
+}
+.ficha-sinfoto-img img,
+.ficha-sinfoto-img .an-fig {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ficha-sinfoto-texto {
+  font-size: var(--t-s);
+  line-height: 1.45;
+  color: var(--texto-2);
+}
+
+/* — enlaces de la chuleta — */
+.chuleta-enlaces {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+}
+.enlace-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 48px;
+  padding: 0 var(--e2);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font-size: var(--t-s);
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform var(--v-rapido) var(--curva), border-color var(--v-rapido) var(--curva);
+}
+.enlace-btn:active {
+  transform: scale(0.95);
+  border-color: var(--acento);
+}
+.enlace-btn svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* — mis fotos y vídeos — */
+.medios {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--e2);
+}
+.medio {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--r-s);
+  background: var(--superficie-3);
+  overflow: hidden;
+  animation: entra var(--v-normal) var(--curva-salida);
+}
+.medio img,
+.medio video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.medio-borrar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--blanco);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* — historial — */
+.historial-fila {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 48px;
+  padding: 0 var(--e2);
+  border-bottom: 1px solid var(--borde-tenue);
+}
+.historial-fila:last-child {
+  border-bottom: 0;
+}
+.historial-peso {
+  font-weight: 700;
+}
+.historial-fecha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+
+/* ===========================================================================
+ * 13. LA FIGURA QUE HACE EL EJERCICIO  (animacion.js)
+ *
+ * El músculo que trabaja va en rojo, y su nombre SIEMPRE al lado: el color
+ * como único indicador no se lee con daltonismo ni con el móvil al sol.
+ * ========================================================================= */
+.an-fig {
+  --hueso: var(--texto-2);
+  --aparato: var(--borde);
+  display: block;
+  overflow: visible;
+}
+.an-hueso {
+  fill: none;
+  stroke: var(--hueso);
+  stroke-width: 5.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.an-cabeza {
+  fill: var(--hueso);
+}
+.an-aparato {
+  fill: none;
+  stroke: var(--aparato);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+/* La colchoneta del banco: si es un palo fino no se entiende que hay un banco. */
+.an-colchoneta {
+  fill: none;
+  stroke: var(--aparato);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+.an-carga {
+  fill: none;
+  stroke: var(--acento);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+.an-disco {
+  fill: none;
+  stroke: var(--acento);
+  stroke-width: 4.6;
+  stroke-linecap: round;
+}
+/* El lado de detrás: mismo dibujo, más apagado. De frente los dos lados pesan
+   igual, porque ahí lo que cuenta es justo la simetría. */
+.an-lejos {
+  opacity: 0.42;
+}
+.an-lejos .an-hueso {
+  stroke-width: 4.6;
+}
+.an-frontal .an-lejos {
+  opacity: 1;
+}
+/* Qué hueso se pinta de rojo en cada ejercicio. */
+.m-pecho .h-tronco,
+.m-dorsal .h-tronco,
+.m-abdomen .h-tronco,
+.m-oblicuos .h-tronco,
+.m-corazon .h-tronco,
+.m-trapecio .h-cuello,
+.m-cuello .h-cuello,
+.m-hombro .h-brazo,
+.m-triceps .h-brazo,
+.m-biceps .h-antebrazo,
+.m-antebrazo .h-antebrazo,
+.m-cuadriceps .h-muslo,
+.m-isquios .h-muslo,
+.m-gluteo .h-muslo,
+.m-gemelo .h-pierna {
+  stroke: var(--musculo);
+}
+/* El lado de detrás no se pinta de rojo: dos rojos a distinta opacidad parecen
+   dos músculos distintos. */
+.an-lejos .an-hueso {
+  stroke: var(--hueso);
+}
+
+/* ===========================================================================
+ * 14. GRÁFICAS
+ *
+ * Reglas que no se negocian (skill `dataviz`):
+ *   · Un solo eje. Nunca dos escalas en la misma gráfica.
+ *   · Los colores de serie salen de --serie-N, validados para daltonismo.
+ *   · El texto lleva color de TEXTO, nunca el color de la serie.
+ *   · Rejilla y ejes recesivos; la tinta va en el dato.
+ *   · Con dos series o más, leyenda SIEMPRE. Con una, el título ya la nombra.
+ * ========================================================================= */
+.grafica {
+  padding: var(--e4);
+  margin-bottom: var(--e3);
+}
+
+/* La lectura destacada: el número grande primero, el contexto debajo. Un dato
+   sin su contexto no informa, ocupa sitio. */
+.grafica-lectura {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+}
+.gl-valor {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.gl-cuando {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.gl-extra {
+  width: 100%;
+  font-size: var(--t-xs);
+  color: var(--texto-2);
+}
+
+.grafica-svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  touch-action: pan-y;
+}
+.g-rejilla {
+  stroke: var(--borde-tenue);
+  stroke-width: 1;
+}
+.g-eje {
+  fill: var(--texto-tenue);
+  font-size: 10px;
+  font-weight: 600;
+}
+.g-etiqueta {
+  fill: var(--texto-2);
+  font-size: 10px;
+  font-weight: 700;
+}
+.g-etiqueta-max {
+  fill: var(--texto);
+  font-weight: 800;
+}
+.g-guia {
+  stroke: var(--texto-tenue);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+/* La línea: 2 px, y el área por debajo muy tenue — el área es contexto, no dato. */
+.g-linea {
+  fill: none;
+  stroke: var(--serie-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.g-area {
+  fill: url(#g-degradado);
+  stroke: none;
+}
+.g-punto {
+  fill: var(--serie-1);
+  stroke: var(--superficie);
+  stroke-width: 2;
+}
+.g-punto-activo {
+  r: 6;
+  filter: drop-shadow(0 0 6px var(--acento-halo));
+}
+/* `.g-capa` NO es una capa de datos: es el rectángulo invisible que recoge el
+   dedo en toda la gráfica. Pintarlo con el color de serie lo convirtió en un
+   ladrillo azul que tapaba la gráfica entera. La zona de toque es transparente
+   y GRANDE a propósito: acertar un punto de 9 px con el dedo es imposible. */
+.g-capa {
+  fill: transparent;
+  pointer-events: all;
+  cursor: crosshair;
+}
+/* El punto que sigue al dedo. */
+.g-foco {
+  fill: var(--serie-1);
+  stroke: var(--superficie);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 6px var(--acento-halo));
+}
+/* Barras: extremo redondeado de 4 px anclado a la base, y 2 px de hueco entre
+   barras contiguas para que dos valores iguales no parezcan uno solo. */
+.g-barra {
+  fill: var(--serie-1);
+  rx: 4;
+  transition: fill var(--v-rapido) var(--curva);
+}
+.g-barra-activa {
+  fill: var(--acento-vivo);
+}
+.g-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e3);
+  margin-top: var(--e2);
+}
+.g-ley {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-xs);
+  color: var(--texto-2);
+}
+.g-ley-linea {
+  width: 16px;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--serie-1);
+}
+.g-ley-punto {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-full);
+  background: var(--serie-1);
+}
+.grafica-vacia {
+  margin: 0;
+  padding: var(--e5) var(--e3);
+  font-size: var(--t-s);
+  color: var(--texto-tenue);
+  text-align: center;
+}
+.grafica-acciones {
+  display: flex;
+  gap: var(--e2);
+  margin-top: var(--e2);
+}
+/* La tabla es la alternativa al color: siempre existe, aunque esté plegada. */
+.grafica-tabla {
+  width: 100%;
+  margin-top: var(--e3);
+  border-collapse: collapse;
+  font-size: var(--t-xs);
+}
+.grafica-tabla th,
+.grafica-tabla td {
+  padding: 7px var(--e2);
+  border-bottom: 1px solid var(--borde-tenue);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.grafica-tabla th:first-child,
+.grafica-tabla td:first-child {
+  text-align: left;
+}
+.grafica-tabla th {
+  color: var(--texto-tenue);
+  font-weight: 700;
+}
+
+/* — métricas — */
+.analisis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--e2);
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+}
+.metrica {
+  padding: var(--e3);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+}
+.metrica-etiqueta {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--texto-tenue);
+}
+.metrica-valor {
+  display: block;
+  margin: 2px 0;
+  font-size: var(--t-l);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.metrica-pie {
+  font-size: var(--t-xs);
+  color: var(--texto-2);
+}
+/* Subir y bajar llevan flecha ADEMÁS de color. */
+.sube {
+  color: var(--bien);
+}
+.baja {
+  color: var(--mal);
+}
+.sube::before {
+  content: '▲ ';
+  font-size: 0.7em;
+}
+.baja::before {
+  content: '▼ ';
+  font-size: 0.7em;
+}
+
+.volumen-linea {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e2);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--borde-tenue);
+}
+.volumen-etiqueta {
+  font-size: var(--t-s);
+  color: var(--texto-2);
+}
+.volumen-valor {
+  font-weight: 700;
+}
+
+/* ===========================================================================
+ * 15. NUTRICIÓN — piezas sueltas
+ *
+ * El maquetado de la cabecera, el anillo, los macros y la semana está en la
+ * sección 18: se reescribió mirando el HTML real. Aquí solo queda lo que no
+ * cambió. Tener las mismas clases definidas dos veces es la mejor forma de
+ * que una regla anule a otra sin que se note; por eso se borró la primera.
+ * ========================================================================= */
+
+.nut-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e2);
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+  border: 1px solid color-mix(in srgb, var(--aviso) 40%, transparent);
+  border-radius: var(--r-s);
+  background: color-mix(in srgb, var(--aviso) 12%, transparent);
+  font-size: var(--t-s);
+  line-height: 1.45;
+  color: var(--texto);
+}
+.nut-seccion {
+  padding: var(--e3) var(--e4);
+  margin-bottom: var(--e3);
+}
+.nut-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 52px;
+  padding: var(--e2) 0;
+  border-bottom: 1px solid var(--borde-tenue);
+  animation: entra var(--v-normal) var(--curva-salida) both;
+  animation-delay: calc(min(var(--i, 0), 10) * 22ms);
+}
+.nut-item:last-child {
+  border-bottom: 0;
+}
+.nut-item-txt {
+  min-width: 0;
+}
+.nut-item-nombre {
+  overflow: hidden;
+  font-size: var(--t-s);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nut-item-det {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.nut-item-kcal {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.nut-item-editar,
+.nut-quitar,
+.nut-editar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--texto-tenue);
+  cursor: pointer;
+}
+.nut-quitar {
+  color: var(--mal);
+}
+.nut-item-editar:active,
+.nut-quitar:active,
+.nut-editar:active {
+  background: var(--superficie-3);
+}
+.nut-resultados {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e1);
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.nut-op {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--e3);
+  min-height: 60px;
+  padding: var(--e2);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--v-rapido) var(--curva), border-color var(--v-rapido) var(--curva);
+}
+.nut-op:active {
+  transform: scale(0.985);
+  border-color: var(--acento);
+}
+.nut-op-foto,
+.nut-sinfoto {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-s);
+  background: var(--superficie-3);
+  object-fit: cover;
+  overflow: hidden;
+  color: var(--texto-tenue);
+}
+.nut-op-nombre {
+  font-size: var(--t-s);
+  font-weight: 600;
+}
+.nut-op-det,
+.nut-op-txt {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.nut-op-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+}
+.nut-previo,
+.nut-prestado,
+.nut-puente {
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  font-size: var(--t-s);
+  color: var(--texto-2);
+}
+.nut-puente-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin-top: var(--e2);
+}
+.nut-columna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+}
+.nut-repetir-titulo {
+  margin-top: var(--e4);
+}
+.objetivo {
+  padding: var(--e4);
+  margin-bottom: var(--e3);
+}
+.objetivo-listo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e2);
+}
+.objetivo-pie {
+  margin-top: var(--e2);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  color: var(--texto-tenue);
+}
+.peso-media {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.peso-detalle {
+  font-size: var(--t-xs);
+  color: var(--texto-2);
+}
+.peso-sin {
+  padding: var(--e4);
+  font-size: var(--t-s);
+  color: var(--texto-tenue);
+  text-align: center;
+}
+.prop-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e2);
+}
+.prop-kcal {
+  font-size: var(--t-l);
+  font-weight: 800;
+}
+.prop-detalle {
+  font-size: var(--t-xs);
+  color: var(--texto-2);
+}
+/* «Lo de siempre» y los platos guardados: una tira que se desliza, no un
+   amasijo que se parte en cuatro líneas y empuja la lista del día fuera de la
+   pantalla. Se sale por los lados de la vista a propósito, para que se vea que
+   hay más a la derecha. */
+.platos-fila {
+  display: flex;
+  gap: var(--e2);
+  padding: var(--e1) var(--e4) var(--e3);
+  margin: 0 calc(var(--e4) * -1);
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.platos-fila::-webkit-scrollbar {
+  display: none;
+}
+.platos-fila > * {
+  flex: none;
+  scroll-snap-align: start;
+  max-width: 62vw;
+}
+.fo-fila,
+.fo-pendiente {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 52px;
+  padding: var(--e2) 0;
+  border-bottom: 1px solid var(--borde-tenue);
+}
+.fo-nombre,
+.fo-alimento {
+  font-size: var(--t-s);
+  font-weight: 600;
+}
+.fo-txt,
+.fo-donde,
+.fo-unidad {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.fo-gramos {
+  width: 82px;
+  min-height: 44px;
+  padding: 0 var(--e2);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fo-unidad-sel {
+  min-height: 44px;
+  border: 1px solid var(--borde);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+}
+.fo-quitar {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--mal);
+  cursor: pointer;
+}
+.fo-falta {
+  color: var(--aviso);
+}
+.fo-fuera {
+  opacity: 0.5;
+}
+.escaner-video {
+  width: 100%;
+  border-radius: var(--r-m);
+  background: #000;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+/* ===========================================================================
+ * 16. GIMNASIOS, MAPA Y AJUSTES
+ * ========================================================================= */
+.sitio {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3) var(--e4);
+  margin-bottom: var(--e2);
+  animation: entra var(--v-lento) var(--curva-salida) both;
+  animation-delay: calc(min(var(--i, 0), 14) * 26ms);
+}
+.mapa {
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-m);
+  background: var(--superficie);
+}
+.mapa-lienzo {
+  position: relative;
+  width: 100%;
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  aspect-ratio: 16 / 11;
+  overflow: hidden;
+}
+.mapa-capa {
+  position: absolute;
+  inset: 0;
+}
+.mapa-pin {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--acento);
+  cursor: pointer;
+}
+.mapa-pie {
+  margin-top: var(--e2);
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.mapa-vacio {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: var(--t-s);
+  color: var(--texto-tenue);
+}
+
+.dirs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+}
+.dir {
+  padding: var(--e3);
+}
+.dir-que {
+  font-size: var(--t-s);
+  font-weight: 700;
+}
+.dir-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--t-xs);
+  color: var(--acento);
+  word-break: break-all;
+}
+.dir-para,
+.dir-caida {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+
+.temas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: var(--e2);
+}
+.tema {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 88px;
+  padding: var(--e2);
+  border: 1px solid var(--borde);
+  cursor: pointer;
+  transition: transform var(--v-rapido) var(--curva), border-color var(--v-rapido) var(--curva);
+}
+.tema:active {
+  transform: scale(0.95);
+}
+.tema[aria-pressed='true'] {
+  border-color: var(--acento);
+  box-shadow: 0 0 0 2px var(--acento-suave);
+}
+.tema-muestra {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--borde);
+  border-radius: var(--r-full);
+}
+.tema-nombre {
+  font-size: var(--t-xs);
+  font-weight: 600;
+}
+
+.creditos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+}
+.credito {
+  padding: var(--e3);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  color: var(--texto-2);
+}
+.credito-ej {
+  font-weight: 700;
+  color: var(--texto);
+}
+.credito-det {
+  color: var(--texto-tenue);
+}
+.credito-enlace {
+  color: var(--acento);
+  word-break: break-all;
+}
+
+/* — editor del plan / elegir máquinas — */
+.dia-fila,
+.ed-fila {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 52px;
+  padding: var(--e2) 0;
+  border-bottom: 1px solid var(--borde-tenue);
+}
+.dia-nombre,
+.ed-nombre {
+  font-size: var(--t-s);
+  font-weight: 600;
+}
+.dia-cuantas,
+.ed-pista,
+.ed-orden {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.dia-actual {
+  color: var(--acento);
+  font-weight: 700;
+}
+.elige-grupo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+}
+/* Botones que llevan dos líneas dentro (nombre + detalle). */
+.dia-elegir,
+.elige-maquina,
+.nut-item-txt,
+.plato-chip,
+.plato-nuevo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: var(--e2);
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--v-rapido) var(--curva);
+}
+.dia-elegir:active,
+.elige-maquina:active,
+.nut-item-txt:active {
+  background: var(--superficie-3);
+}
+.plato-chip,
+.plato-nuevo {
+  flex: none;
+  gap: 1px;
+  min-height: 52px;
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plato-chip > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plato-chip > *:first-child {
+  font-size: var(--t-s);
+  font-weight: 600;
+}
+.plato-chip > *:last-child {
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+.plato-nuevo {
+  border-style: dashed;
+  color: var(--acento);
+}
+.ed-cuerpo {
+  display: flex;
+  flex-direction: column;
+}
+.ed-objetivo {
+  width: 66px;
+  min-height: 44px;
+  padding: 0 var(--e2);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-s);
+  background: var(--superficie-2);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* — restos de estado — */
+.ok {
+  color: var(--bien);
+}
+.pendiente {
+  color: var(--aviso);
+}
+.propio,
+.propio-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+}
+.ej-foto {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ===========================================================================
+ * 17. PANTALLAS ANCHAS
+ *
+ * El móvil NO es el escritorio encogido, y el escritorio tampoco es el móvil
+ * estirado: en ancho se reparte en dos columnas, no se estira una.
+ * ========================================================================= */
+@media (min-width: 760px) {
+  .lista {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .analisis {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .nav {
+    padding-bottom: var(--e2);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * BARRA DE ACCIÓN PEGADA ABAJO
+ *
+ * Se queda a la vista mientras se recorre una lista larga (el catálogo son
+ * 1.365 ejercicios). Lleva degradado por encima para que se vea que hay más
+ * contenido debajo, y la lista reserva su altura: si no, las últimas filas se
+ * quedan tapadas y parecen no existir.
+ * ------------------------------------------------------------------------- */
+.barra-accion {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: var(--e3) calc(var(--e4) * -1) calc(var(--e4) * -1);
+  padding: var(--e3) var(--e4) calc(var(--e3) + env(safe-area-inset-bottom));
+  background: var(--superficie);
+}
+.barra-accion::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 22px;
+  background: linear-gradient(to top, var(--superficie), transparent);
+  pointer-events: none;
+}
+
+/* ===========================================================================
+ * 18. NUTRICIÓN — corrección del maquetado sobre el HTML REAL
+ *
+ * La primera versión de estas reglas suponía la estructura y no la miraba:
+ * `.macro-fila` es la línea de dentro (nombre + cifras), no el contenedor de
+ * los tres macros. Salían tres bloques descuadrados. Aquí va lo que pinta
+ * `app.js` de verdad, comprobado en el DOM.
+ * ========================================================================= */
+
+/* Navegación de días: tres zonas de 44 px, la del medio con el día. */
+.nut-dias {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+}
+.nut-dia-nav {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: var(--r-full);
+  background: var(--superficie);
+  color: var(--texto-2);
+}
+.nut-dia-nav:disabled {
+  opacity: 0.35;
+}
+.nut-dia-hoy {
+  min-width: 140px;
+  height: 44px;
+  border-radius: var(--r-full);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  font-weight: 700;
+  color: var(--texto);
+}
+
+/* --- el anillo de calorías --- */
+.nut-cabecera {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--e4);
+  margin-bottom: var(--e3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--r-l);
+  background: radial-gradient(120% 100% at 50% 0%, var(--acento-suave), var(--superficie) 62%);
+  box-shadow: var(--alt-2);
+  overflow: hidden;
+  text-align: center;
+}
+.nut-objetivo-btn {
+  position: absolute;
+  top: var(--e2);
+  right: var(--e2);
+}
+
+.anillo {
+  position: relative;
+  width: 152px;
+  height: 152px;
+}
+.anillo svg {
+  width: 100%;
+  height: 100%;
+  /* El aro arranca arriba y crece en el sentido del reloj, como se lee. */
+  transform: rotate(-90deg);
+}
+.anillo circle {
+  fill: none;
+  stroke-width: 11;
+  stroke-linecap: round;
+}
+.anillo-carril {
+  stroke: var(--superficie-3);
+}
+.anillo-relleno {
+  stroke: var(--acento);
+  /* Se anima el trazo, no el tamaño: `stroke-dashoffset` no obliga a recalcular
+     la página en cada fotograma. */
+  transition: stroke-dashoffset var(--v-lento) var(--curva-salida);
+}
+.anillo-exceso {
+  stroke: var(--aviso);
+  transition: stroke-dashoffset var(--v-lento) var(--curva-salida);
+}
+.anillo-centro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.nut-kcal {
+  display: block;
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+.nut-kcal-obj {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--texto-2);
+}
+.nut-restante {
+  margin-top: var(--e2);
+  font-size: var(--t-s);
+  color: var(--texto-2);
+}
+.nut-restante b {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+/* Pasarse se dice con PALABRAS además de con el ámbar. */
+.nut-pasado {
+  color: var(--aviso);
+}
+.nut-pasado b {
+  color: var(--aviso);
+}
+
+/* --- macros --- */
+.macro-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+  width: 100%;
+  margin-top: var(--e3);
+}
+.macro {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: left;
+}
+.macro-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e2);
+}
+.macro-nombre {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--texto-2);
+}
+.macro-cifra {
+  font-size: var(--t-s);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.macro-obj {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--texto-tenue);
+}
+.macro-barra {
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--superficie-3);
+  overflow: hidden;
+}
+.macro-barra > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--serie-1);
+  transform-origin: left;
+  animation: crece var(--v-lento) var(--curva-salida) both;
+}
+.macro-prot {
+  background: var(--serie-1);
+}
+.macro-carb {
+  background: var(--serie-4);
+}
+.macro-gras {
+  background: var(--serie-2);
+}
+.macro-pasado {
+  color: var(--aviso);
+}
+.macro-relleno-pasado {
+  background: var(--aviso);
+}
+
+/* --- la semana en barras --- */
+.nut-semana {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e1);
+  height: 108px;
+  margin-top: var(--e3);
+}
+.nut-dia {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--texto-tenue);
+  font-size: var(--t-xs);
+}
+/* La columna es el CARRIL; la `<i>` de dentro es lo que ese día se comió. */
+.nut-columna {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 26px;
+  height: 76px;
+  border-radius: var(--r-xs);
+  background: var(--superficie-3);
+  overflow: hidden;
+}
+.nut-columna > i {
+  display: block;
+  width: 100%;
+  border-radius: inherit;
+  background: var(--serie-1);
+  transform-origin: bottom;
+  animation: crece-alto var(--v-lento) var(--curva-salida) both;
+}
+.nut-columna > i.nut-hoy {
+  background: var(--acento-vivo);
+}
+@keyframes crece-alto {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.nut-dia-letra {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.nut-elegido .nut-dia-letra {
+  color: var(--acento);
+}
+.nut-media {
+  margin: var(--e3) 0 0;
+  font-size: var(--t-xs);
+  color: var(--texto-tenue);
+}
+
+/* --- acciones y lista del día --- */
+.nut-acciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--e2);
+  margin-bottom: var(--e3);
+}
+.nut-acciones .boton {
+  min-height: 58px;
+}
+
+.nut-grupo-kcal {
+  float: right;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--texto-2);
+}
+.nut-item-editar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  width: auto;
+  height: auto;
+  padding: var(--e2) 0;
+  background: none;
+  text-align: left;
+}
