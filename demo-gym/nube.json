@@ -1,0 +1,24 @@
+{
+  "_lee_esto": "La URL y la clave `anon` del proyecto de Supabase, que viajan DENTRO de la app. Sin ellas un enlace corto (#/c/…) no lo puede abrir nadie más que quien lo creó: el que recibe abre la app sin nada configurado y la nube no le contesta. La clave `anon` es PÚBLICA por diseño y va dentro de cualquier web hecha con Supabase; sola no abre nada, quien manda son las políticas RLS de supabase/schema.sql. La que NO puede aparecer aquí jamás es la `service_role`.",
+  "_donde_estan": "Supabase → tu proyecto → Settings → API → «Project URL» y «Project API keys · anon public».",
+  "url": "https://pzhdsgovlfmgxhcgawrx.supabase.co",
+  "anon": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6aGRzZ292bGZtZ3hoY2dhd3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTk3MjQsImV4cCI6MjEwMzY5NTcyNH0.rkCRFxSFF2TGxJZbyc0edsbC0yqwaA6n2hx5MA_Z0zY",
+  "_web": "La dirección pública de la app, de la que cuelgan los enlaces que mandas y a la que vuelven los correos de Supabase. La da Cloudflare al publicar: es https://<nombre>.<tu-subdominio>.workers.dev (sin barra al final). Si se deja vacía, la app NO genera enlaces y lo dice: antes daba uno que parecía bueno y no abría en ninguna parte.",
+  "web": "https://gym.carlosparmar2006.workers.dev",
+  "_mapa": "De dónde salen el buscador de calles y las imágenes del mapa. Se pueden cambiar SIN publicar una versión nueva de la app, igual que `web`. Son LISTAS y se prueban en orden hasta que uno conteste: la política de uso de OpenStreetMap no contempla las apps y pueden dejar de contestarnos cualquier día, así que el repuesto va dentro desde el principio. `buscador` admite Nominatim y Photon (se deduce por la dirección, o se dice con {\"url\":…,\"tipo\":\"photon\"}). `teselas` tiene que servir /z/x/y.png. `sitios` es Overpass, que busca POR NOMBRE en vez de por direccion: es lo que hace que escribiendo McDonalds salga el McDonalds, y solo se usa cuando se sabe donde estas. Si se quitan o se escriben mal, se usan los de fábrica.",
+  "mapa": {
+    "buscador": [
+      "https://gym.carlosparmar2006.workers.dev/api/buscar",
+      "https://nominatim.openstreetmap.org/search",
+      "https://photon.komoot.io/api"
+    ],
+    "teselas": [
+      "https://tile.openstreetmap.org",
+      "https://basemaps.cartocdn.com/rastertiles/voyager"
+    ],
+    "sitios": [
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter"
+    ]
+  }
+}

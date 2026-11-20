@@ -17,6 +17,16 @@
 
 export const SERIES = ['var(--serie-1)', 'var(--serie-2)', 'var(--serie-3)', 'var(--serie-4)', 'var(--serie-5)'];
 
+/**
+ * El color de una gráfica de UNA sola serie.
+ *
+ * La paleta `SERIES` existe para que dos líneas juntas se distingan con
+ * daltonismo. Con una sola línea no hay nada que distinguir, así que ahí manda
+ * la coherencia: el color de la app. Es lo que hace que la gráfica parezca
+ * parte de la pantalla y no un recorte pegado de otro sitio.
+ */
+export const SERIE_UNICA = 'var(--acento)';
+
 const NS = 'http://www.w3.org/2000/svg';
 
 function el(nombre, attrs = {}) {
@@ -40,7 +50,7 @@ function el(nombre, attrs = {}) {
  * Y como el ancho cambia (girar el móvil, el panel del HUD), se vuelve a
  * dibujar cuando cambia de verdad.
  */
-function medidas(contenedor, { proporcion = 0.62, minAlto = 200, maxAlto = 300 } = {}) {
+function medidas(contenedor, { proporcion = 0.66, minAlto = 220, maxAlto = 320 } = {}) {
   // Un contenedor todavía sin maquetar mide 0. Ahí NO se dibuja a 0 px (eso es
   // el bug de la esfera invisible del HUD): se usa un ancho decente y el
   // observador repinta en cuanto el hueco existe de verdad.
@@ -148,7 +158,7 @@ function escalaBonita(min, max, pasos = 4) {
  * opciones: {unidad, titulo, color, formato(v), alturaMin}
  */
 export function lineaTemporal(contenedor, puntos, opciones = {}) {
-  const { unidad = 'kg', color = SERIES[0], formato = null, vacio = 'Aún no hay datos suficientes.' } = opciones;
+  const { unidad = 'kg', color = SERIE_UNICA, formato = null, vacio = 'Aún no hay datos suficientes.' } = opciones;
 
   contenedor.innerHTML = '';
   contenedor.classList.add('grafica');
@@ -196,7 +206,7 @@ export function lineaTemporal(contenedor, puntos, opciones = {}) {
   const idGrad = `g${Math.random().toString(36).slice(2, 8)}`;
   const defs = el('defs');
   const grad = el('linearGradient', { id: idGrad, x1: 0, y1: 0, x2: 0, y2: 1 });
-  grad.appendChild(el('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': '0.22' }));
+  grad.appendChild(el('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': '0.3' }));
   grad.appendChild(el('stop', { offset: '100%', 'stop-color': color, 'stop-opacity': '0' }));
   defs.appendChild(grad);
   svg.appendChild(defs);
@@ -209,7 +219,26 @@ export function lineaTemporal(contenedor, puntos, opciones = {}) {
       stroke: 'none',
     })
   );
-  svg.appendChild(el('path', { d: dLinea, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+  // La línea se DIBUJA de izquierda a derecha en vez de aparecer hecha. No es
+  // un adorno: el ojo recorre la evolución en el mismo orden en que ocurrió.
+  // Se hace con el trazo discontinuo (una raya del largo de toda la línea que
+  // se va descubriendo), que es lo único que la GPU anima sin repintar.
+  const linea = el('path', {
+    d: dLinea, fill: 'none', stroke: color, 'stroke-width': 3,
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round', class: 'g-linea',
+  });
+  svg.appendChild(linea);
+  try {
+    const largo = linea.getTotalLength();
+    if (largo && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      linea.style.strokeDasharray = largo;
+      linea.style.strokeDashoffset = largo;
+      requestAnimationFrame(() => {
+        linea.style.transition = 'stroke-dashoffset 760ms cubic-bezier(0.16, 1, 0.3, 1)';
+        linea.style.strokeDashoffset = '0';
+      });
+    }
+  } catch { /* sin ventana (tests en Node): la línea se queda quieta y ya */ }
 
   // --- marcadores ----------------------------------------------------------
   // Un punto por dato solo mientras se distingan. Con 24 sesiones en 228 px un
@@ -238,9 +267,16 @@ export function lineaTemporal(contenedor, puntos, opciones = {}) {
   const verMarca = (i) => marcas.forEach((m, k) => m.setAttribute('r', k === i ? 5.5 : (todosLosPuntos || k === iMaximo || k === puntos.length - 1 || puntos[k].enCurso) ? 4.5 : 0));
 
   // --- etiquetas directas: solo récord y último ---------------------------
+  //
+  // Y SOLO SI NO SE PISAN. Con una progresión de las que suben siempre, el
+  // récord y el último caen casi en el mismo sitio y salían los dos números
+  // encima del otro, ilegibles («46 kg» sobre «43,5 kg»). Cuando eso pasa gana
+  // el ÚLTIMO: es el que se mira, y el récord ya está en las métricas de abajo.
   const iMax = iMaximo;
   const iUlt = puntos.length - 1;
-  for (const i of new Set([iMax, iUlt])) {
+  const cerca = (a, b) => Math.abs(x(a) - x(b)) < 56 && Math.abs(y(puntos[a].valor) - y(puntos[b].valor)) < 26;
+  const quienes = iMax === iUlt || cerca(iMax, iUlt) ? [iUlt] : [iMax, iUlt];
+  for (const i of quienes) {
     const arriba = y(puntos[i].valor) > M.arriba + 26;
     const t = el('text', {
       x: Math.min(Math.max(x(i), M.izquierda + 12), W - M.derecha - 12),
@@ -349,7 +385,7 @@ export function lineaTemporal(contenedor, puntos, opciones = {}) {
  * Barras — para volumen por periodo (semana / mes / trimestre)
  * ========================================================================== */
 export function barras(contenedor, puntos, opciones = {}) {
-  const { color = SERIES[0], formato = (v) => `${Math.round(v)} kg`, vacio = 'Aún no hay datos.' } = opciones;
+  const { color = SERIE_UNICA, formato = (v) => `${Math.round(v)} kg`, vacio = 'Aún no hay datos.' } = opciones;
   contenedor.innerHTML = '';
   contenedor.classList.add('grafica');
   if (!puntos || !puntos.length) {

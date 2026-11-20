@@ -1,17 +1,63 @@
 {
   "name": "GYM — registro de pesos",
   "short_name": "GYM",
-  "description": "Control de los pesos que levanto en cada máquina y en cada gimnasio.",
+  "description": "Apunta lo que levantas en cada máquina y en cada gimnasio, con o sin cobertura.",
+  "version": "0.37.1",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0e1116",
-  "theme_color": "#0e1116",
+  "background_color": "#0b0d11",
+  "theme_color": "#0b0d11",
   "lang": "es",
+  "dir": "ltr",
+  "categories": [
+    "health",
+    "fitness",
+    "lifestyle"
+  ],
   "icons": [
-    { "src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Apuntar una serie",
+      "short_name": "Entrenar",
+      "url": "./index.html#entrenar",
+      "icons": [
+        {
+          "src": "icono-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Apuntar una comida",
+      "short_name": "Nutrición",
+      "url": "./index.html#nutricion",
+      "icons": [
+        {
+          "src": "icono-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

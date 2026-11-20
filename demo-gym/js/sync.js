@@ -21,13 +21,35 @@
 
 import * as db from './db.js';
 
+/* --------------------------------------------------------------------------
+ * ESTO NO EXISTE PARA QUIEN SE BAJE LA APP  (1-sep-2026)
+ *
+ * Carlos: *«aún sale arriba lo de "sin PC", no debería salir; en la última
+ * actualización habíamos quitado toda referencia a JARVIS, pero lo habías
+ * añadido en un registro de otro lado»*. Tenía razón: se escondió el APARTADO
+ * de Ajustes tras el interruptor de modo personal, pero la sincronización
+ * seguía corriendo sola para todo el mundo. Y como el PC de Carlos no está al
+ * otro lado del móvil de nadie, cada intento fallaba y pintaba «sin PC» en la
+ * cabecera de la app que se va a publicar.
+ *
+ * Ahora el interruptor manda sobre la sincronización entera, no solo sobre su
+ * pantalla: sin modo personal no se llama al PC, no se falla y no hay chip.
+ * Es la misma clave que usa `app.js` (siete toques en la línea de la versión).
+ * ------------------------------------------------------------------------ */
+const CLAVE_MODO_PERSONAL = 'modo_personal';
+
+/** ¿Está encendida la sincronización con el PC? Por defecto, NO. */
+export async function encendido() {
+  return !!(await db.ajuste(CLAVE_MODO_PERSONAL, false));
+}
+
 const CLAVE_MARCA = 'sync_marca';
 const CLAVE_URL = 'sync_url';
 const CLAVE_TOKEN = 'sync_token';
 
 /** Por defecto, el PC de casa en la red local. Editable en Ajustes.
  *  (8770 es el servidor del robot MK JARVIS; el gym usa el 8772). */
-export const URL_POR_DEFECTO = 'http://127.0.0.1:8772';
+export const URL_POR_DEFECTO = 'http://192.168.68.107:8772';
 
 let _enCurso = false;
 const _oyentes = new Set();
@@ -137,6 +159,14 @@ export async function sincronizar({ silencioso = true, forzar = false } = {}) {
   //
   // Desde Ajustes se sincroniza con `forzar: true`, que es cuando Carlos lo
   // pide a propósito y sí debe salir.
+
+  // APAGADO DE FÁBRICA. Y se sale SIN avisar a los oyentes: avisar de
+  // «pendiente» es justo lo que pintaba «sin PC» en la cabecera de todo el
+  // mundo. `forzar` es el botón de Ajustes, que solo existe en modo personal.
+  if (!forzar && !(await encendido())) {
+    return { ok: false, enviados: 0, recibidos: 0, motivo: 'apagado' };
+  }
+
   const enDesarrollo = ['localhost', '127.0.0.1'].includes(location.hostname);
   if (enDesarrollo && !forzar) {
     console.info('[sync] bloqueado en localhost (desarrollo). Usa Ajustes para forzarlo.');
@@ -219,8 +249,10 @@ export function automatico() {
     console.info('[sync] automático desactivado en localhost (desarrollo)');
     return;
   }
-  const intentar = () => {
-    if (navigator.onLine) sincronizar({ silencioso: true });
+  const intentar = async () => {
+    if (!navigator.onLine) return;
+    if (!(await encendido())) return;   // sin modo personal no hay PC al que llamar
+    sincronizar({ silencioso: true });
   };
   window.addEventListener('online', intentar);
   document.addEventListener('visibilitychange', () => {

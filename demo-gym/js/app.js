@@ -15,6 +15,9 @@ import * as G from './graficas.js';
 import * as sync from './sync.js';
 import * as cat from './catalogo.js';
 import { icono } from './iconos.js';
+import * as MET from './metas.js';
+import * as CAL from './calendario.js';
+import * as TEM from './temas.js';
 import * as fotos from './fotos.js';
 import * as N from './nutricion.js';
 import * as C from './comida.js';
@@ -23,6 +26,22 @@ import * as P from './plan.js';
 // `mapa()` que convierte listas en Map. Llamarlo igual rompía toda la app con
 // «Identifier 'mapa' has already been declared».
 import * as geo from './mapa.js';
+import * as PF from './perfil.js';
+import * as INS from './insignias.js';
+import * as nube from './nube.js';
+import * as comp from './compartir.js';
+import * as social from './social.js';
+import * as BV from './bienvenida.js';
+import * as ID from './identidad.js';
+// El vestuario (0.20.0): las cajas, los cosméticos, la tienda y el sonido. La
+// pantalla vive en `vestuario.js` porque este fichero ya es la app entera; aquí
+// solo se le da el puente con lo de casa (hojas, avisos, guardar).
+import * as VEST from './vestuario.js';
+import * as MOT from './motor.js';
+import * as CAJ from './cajas.js';
+import * as COS from './cosmeticos.js';
+import * as SON from './sonido.js';
+import * as PELIS from './peliculas.js';
 
 /* ------------------------------------------------------------------ estado */
 const S = {
@@ -38,9 +57,14 @@ const S = {
   rango: '3m',
   ambito: 'gym',
   maquinaGrafica: null,
+  // Por qué lado entra la pantalla al cambiar de pestaña. Lo pone `irA`.
+  direccion: 'derecha',
+  // Si el siguiente `pintar()` es un CAMBIO DE PESTAÑA (y por tanto se cruza)
+  // o un simple repintado (y por tanto no se mueve nada).
+  transicion: false,
   cache: { gimnasios: [], maquinas: [], series: [], sesiones: [], rutinas: [],
            alimentos: [], comidas: [], objetivos: [], pesos: [], platos: [],
-           vinculos: [], momentos: [] },
+           vinculos: [], momentos: [], metas: [], calendario: [], perfil: null },
   urlsBlob: new Set(),
 };
 
@@ -64,6 +88,8 @@ function aviso(texto, ms = 2100) {
   $$('.aviso').forEach((a) => a.remove());
   const d = document.createElement('div');
   d.className = 'aviso';
+  d.setAttribute('role', 'status');
+  d.setAttribute('aria-live', 'polite');
   d.textContent = texto;
   document.body.appendChild(d);
   setTimeout(() => d.remove(), ms);
@@ -76,7 +102,7 @@ function hoyISO() {
 /* --------------------------------------------------------------- recargar */
 async function recargar() {
   const [gimnasios, maquinas, series, sesiones, rutinas, alimentos, comidas, objetivos,
-         pesos, platos, vinculos, momentos] =
+         pesos, platos, vinculos, momentos, metas, calendario, perfiles, vestuarios] =
     await Promise.all([
       db.todos('gimnasios'),
       db.todos('maquinas'),
@@ -90,13 +116,23 @@ async function recargar() {
       db.todos('platos'),
       db.todos('vinculos'),
       db.todos('momentos'),
+      db.todos('metas'),
+      db.todos('calendario'),
+      db.todos('perfil'),
+      db.todos('vestuario'),
     ]);
-  // Las rutinas mandan en el orden en que se rotan: se ordenan SIEMPRE por
-  // `orden` (las que vengan de una base vieja, sin él, van al final por nombre).
   // Las rutinas mandan en el orden en que se rotan: se ordenan SIEMPRE por
   // `orden` (ver plan.js). Las de una base vieja, sin él, van al final.
   S.cache = { gimnasios, maquinas, series, sesiones, rutinas: P.ordenar(rutinas),
-              alimentos, comidas, objetivos, pesos, platos, vinculos, momentos };
+              alimentos, comidas, objetivos, pesos, platos, vinculos, momentos,
+              metas, calendario,
+              // Una sola fila, con id fijo. Si la base viene de una versión
+              // anterior no hay ninguna: se crea la primera vez que se guarda.
+              perfil: perfiles[0] || null,
+              // Igual que el perfil: una sola fila. Si no existe, el vestuario
+              // se estrena la primera vez que se abre (y ahí queda escrito
+              // desde cuándo cuentan las cajas).
+              vestuario: vestuarios[0] || null };
   if (!S.gimnasioId || !gimnasios.some((g) => g.id === S.gimnasioId)) {
     S.gimnasioId = (await db.ajuste('ultimo_gym')) || (gimnasios[0] && gimnasios[0].id) || null;
     if (S.gimnasioId && !gimnasios.some((g) => g.id === S.gimnasioId)) S.gimnasioId = gimnasios[0] ? gimnasios[0].id : null;
@@ -138,7 +174,7 @@ async function sesionDeHoy(gimnasioId) {
  * FOTOS — se comprimen antes de guardarlas: una foto de móvil son 4 MB y en
  * una ficha de máquina con 300 px de ancho no se nota la diferencia.
  * ========================================================================== */
-function comprimir(archivo, maxLado = 900, calidad = 0.75) {
+function comprimir(archivo, maxLado = 900, calidad = 0.75, tipo = 'image/jpeg') {
   return new Promise((res, rej) => {
     const img = new Image();
     const url = URL.createObjectURL(archivo);
@@ -149,7 +185,12 @@ function comprimir(archivo, maxLado = 900, calidad = 0.75) {
       c.height = Math.round(img.height * escala);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      c.toBlob((b) => (b ? res(b) : rej(new Error('no pude comprimir'))), 'image/jpeg', calidad);
+      // El TIPO es un parámetro desde el 1-sep-2026: las fotos de rutina van en
+      // WebP, que a igualdad de vista pesa la mitad que JPEG — y con 1 GB para
+      // todo el mundo, la mitad es la diferencia entre 3.400 fotos y 6.800.
+      // Si el navegador no supiera WebP, `toBlob` cae solo a PNG y sigue
+      // funcionando; por eso no hace falta comprobarlo.
+      c.toBlob((b) => (b ? res(b) : rej(new Error('no pude comprimir'))), tipo, calidad);
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -165,9 +206,23 @@ function urlDe(blob) {
   return u;
 }
 
+/**
+ * Suelta las direcciones de los blob de la pintada ANTERIOR — pero no ahora.
+ *
+ * (2-sep-2026) Se soltaban en el acto, al empezar cada pintada, y eso CANCELA
+ * las imágenes que todavía se estaban cargando: la foto de perfil, que llega
+ * de IndexedDB y por tanto siempre va un poco por detrás del HTML. En la
+ * consola salía un `ERR_FILE_NOT_FOUND` por cada una, y en pantalla el
+ * fantasma de la vista que se va —que sigue ahí durante el empujón— perdía sus
+ * fotos y dejaba huecos grises justo mientras se mira.
+ *
+ * Kilómetro y medio de segundo después ya no hay ni fantasma ni carga en
+ * curso, y soltarlas no le quita nada a nadie.
+ */
 function limpiarUrls() {
-  for (const u of S.urlsBlob) URL.revokeObjectURL(u);
+  const viejas = [...S.urlsBlob];
   S.urlsBlob.clear();
+  setTimeout(() => { for (const u of viejas) URL.revokeObjectURL(u); }, 1500);
 }
 
 /* ========================================================================== *
@@ -199,13 +254,14 @@ function hoja(titulo, contenidoHTML, alMontar, opciones = {}) {
       <div class="hoja-cuerpo">${contenidoHTML}</div>
     </div>`;
   const cerrar = () => {
+    MOT.motor.desmontar(fondo);
     fondo.remove();
     document.body.style.overflow = '';
   };
   const hayTrabajo = () => {
     try { return !!(opciones.hayTrabajo && opciones.hayTrabajo()); } catch { return false; }
   };
-  fondo.addEventListener('click', (e) => {
+  fondo.addEventListener('click', async (e) => {
     const esFondo = e.target === fondo;
     const esBoton = e.target.hasAttribute('data-cerrar');
     if (!esFondo && !esBoton) return;
@@ -214,12 +270,124 @@ function hoja(titulo, contenidoHTML, alMontar, opciones = {}) {
     // haya que apuntar a un botón de 44 px para tirar diez minutos de trabajo
     // es exactamente la fricción que hace falta aquí.
     if (esFondo) return aviso('Toca «Cerrar» si de verdad quieres salir', 2400);
-    if (confirm(`${opciones.avisoSalir || 'Vas a perder lo que has metido aquí.'}\n\n¿Salir igualmente?`)) cerrar();
+    if (await preguntar(`${opciones.avisoSalir || 'Vas a perder lo que has metido aquí.'}\n\n¿Salir igualmente?`)) cerrar();
   });
   document.body.appendChild(fondo);
   document.body.style.overflow = 'hidden';
   if (alMontar) alMontar($('.hoja-cuerpo', fondo), cerrar);
+  // Una hoja puede traer piezas del vestuario dentro (la ficha de una pieza, un
+  // lote). Se montan aquí, después de `alMontar`, que es quien puede haber
+  // cambiado el contenido.
+  MOT.motor.montar(fondo, COS.pintorDe);
   return cerrar;
+}
+
+/* ========================================================================== *
+ * PREGUNTAR — la pregunta de sí o no, DENTRO de la app
+ *
+ * Carlos, 3-sep-2026: *«cuando inicio sesión me sale un menú superralo de
+ * Android, feo, y me pone: hay mil no sé cuántos datos, ¿quieres traerlo hasta
+ * aquí? No me gusta nada que salga eso»*.
+ *
+ * Era `confirm()`. Dentro de un WebView eso lo pinta ANDROID, no la app: otra
+ * letra, otros colores, y de título el origen desde el que se sirve la app
+ * (`appassets.androidplatform.net`). En mitad de entrar en tu cuenta eso no
+ * parece tu app: parece un aviso del sistema, y a un aviso del sistema que
+ * aparece solo uno le da a cancelar.
+ *
+ * Y ESO ES LO QUE LE COSTÓ LOS DATOS. Después de reinstalar, ese diálogo era la
+ * ÚNICA forma de recuperar la copia; se ofrecía una vez, y la respuesta de la
+ * izquierda dejaba el móvil en cero sin decir nada más.
+ *
+ * Se usa igual que el de antes, pero con `await`:
+ *     if (!await preguntar('¿Borrar esto?\n\nNo se puede deshacer.')) return;
+ *
+ * La PRIMERA línea es el título y el resto el cuerpo — que es justo como ya
+ * estaban escritos los textos, así que no hay que reescribir ninguno.
+ */
+let _nDialogo = 0;
+
+function preguntar(texto, { si = 'Sí', no = 'No', peligro = false } = {}) {
+  const trozos = String(texto).split('\n\n');
+  let titulo = trozos.shift();
+  // Y si el texto venía de una sola línea («¿Borrar X? Las series no se
+  // tocan.»), el título es la pregunta y lo de detrás es el cuerpo. Un título
+  // de tres renglones no es un título.
+  const corte = titulo.indexOf('? ');
+  if (!trozos.length && corte > 0) {
+    trozos.push(titulo.slice(corte + 2));
+    titulo = titulo.slice(0, corte + 1);
+  }
+  const cuerpo = trozos.filter((t) => t.trim());
+  const n = ++_nDialogo;
+  return new Promise((responder) => {
+    // A dónde vuelve el foco al cerrar. Sin esto, quien navega con teclado o
+    // con TalkBack se queda al principio de la página después de contestar.
+    const antes = document.activeElement;
+    const desbordeAntes = document.body.style.overflow;
+    const fondo = document.createElement('div');
+    fondo.className = 'hoja-fondo fondo-centro';
+    fondo.innerHTML = `
+      <div class="dialogo" role="alertdialog" aria-modal="true"
+           aria-labelledby="dlg-t${n}"${cuerpo.length ? ` aria-describedby="dlg-c${n}"` : ''}>
+        <h2 class="dialogo-titulo" id="dlg-t${n}">${esc(titulo)}</h2>
+        ${cuerpo.length ? `<div class="dialogo-cuerpo" id="dlg-c${n}">${
+          cuerpo.map((t) => `<p>${esc(t).replace(/\n/g, '<br>')}</p>`).join('')}</div>` : ''}
+        <div class="botonera">
+          <button type="button" class="boton boton-2" data-di="no">${esc(no)}</button>
+          <button type="button" class="boton${peligro ? ' boton-peligro' : ''}"
+                  data-di="si">${esc(si)}</button>
+        </div>
+      </div>`;
+
+    let contestado = false;
+    const cerrar = (r) => {
+      if (contestado) return;
+      contestado = true;
+      document.removeEventListener('keydown', teclas, true);
+      fondo.remove();
+      document.body.style.overflow = desbordeAntes;
+      if (antes && antes.focus) { try { antes.focus(); } catch (_) { /* ya no está */ } }
+      responder(r);
+    };
+    // Escapar y tocar fuera son NO. Nunca un sí: lo que se pregunta aquí suele
+    // borrar algo, y un toque perdido no puede ser una respuesta afirmativa.
+    function teclas(e) {
+      if (e.key === 'Escape') { e.preventDefault(); cerrar(false); return; }
+      if (e.key !== 'Tab') return;
+      // El foco no se sale del diálogo: es lo que lo hace modal de verdad.
+      const focos = [...fondo.querySelectorAll('button')];
+      if (!focos.length) return;
+      const i = focos.indexOf(document.activeElement);
+      e.preventDefault();
+      const paso = e.shiftKey ? -1 : 1;
+      focos[(i + paso + focos.length) % focos.length].focus();
+    }
+    fondo.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-di]');
+      if (b) return cerrar(b.dataset.di === 'si');
+      if (e.target === fondo) cerrar(false);
+    });
+    document.addEventListener('keydown', teclas, true);
+    document.body.appendChild(fondo);
+    document.body.style.overflow = 'hidden';
+    // Lo que borra empieza con el foco en la salida; lo demás, en la respuesta
+    // que la pregunta espera.
+    $(peligro ? '[data-di="no"]' : '[data-di="si"]', fondo).focus();
+  });
+}
+
+/**
+ * Cierra TODAS las hojas abiertas, sin preguntar.
+ *
+ * Lo usa cerrar sesión: al salir, cualquier hoja que quedara detrás sería la de
+ * la persona que se acaba de ir, encima de la pantalla de entrada. Aquí no se
+ * respeta `hayTrabajo` a propósito — ya se preguntó una vez, y volver a
+ * preguntar por cada hoja abierta convierte «salir» en un interrogatorio.
+ */
+function cerrarHojas() {
+  $$('.hoja-fondo').forEach((h) => h.remove());
+  document.body.style.overflow = '';
 }
 
 /* ========================================================================== *
@@ -244,6 +412,37 @@ function hoja(titulo, contenidoHTML, alMontar, opciones = {}) {
  */
 const PLAN_POR_DEFECTO = P.POR_DEFECTO;
 
+/**
+ * Cuántas series y repeticiones proponer al meter una máquina en un día.
+ *
+ * Manda lo que tenga escrito la propia rutina (lo pone la bienvenida al
+ * crearla); si no, lo que sale del ESTUDIO con las respuestas guardadas; y si
+ * tampoco, el 3×12 de siempre. Tres escalones, del más concreto al más general.
+ *
+ * Antes esto llamaba a `BV.experienciaDe`, que dejó de existir con el rediseño
+ * de la bienvenida (0.17.0): la experiencia sola ya no decide nada, porque el
+ * volumen depende también del objetivo, de los días y del tiempo por sesión.
+ * Se quedó un `TypeError` en la consola cada vez que se metía una máquina en un
+ * día sin que se notara en la pantalla. Lo cazó `pc/test_perfil_real.py`, que
+ * mira la consola: por eso ese test comprueba que no haya NI UN error.
+ */
+async function seriesRepsPorDefecto(rutina) {
+  if (rutina && rutina.seriesPorDefecto && rutina.repsPorDefecto) {
+    return { series: rutina.seriesPorDefecto, reps: rutina.repsPorDefecto };
+  }
+  try {
+    const e = await BV.estudioGuardado();
+    // El estudio da series POR SEMANA de cada músculo; aquí hace falta por
+    // sesión. La misma cuenta que usa la bienvenida al crear las rutinas.
+    return {
+      series: Math.max(2, Math.round(e.seriesPorGrupo / 2)),
+      reps: e.reps.tipico,
+    };
+  } catch {
+    return { series: PLAN_POR_DEFECTO.series, reps: PLAN_POR_DEFECTO.reps };
+  }
+}
+
 /** El plan de la rutina, con las máquinas del gimnasio en el que está. */
 function planDe(rutina, gimnasioId = S.gimnasioId) {
   return P.planDe(rutina, S.cache.maquinas.filter((m) => m.gimnasioId === gimnasioId));
@@ -256,6 +455,18 @@ function sesionHoy(gimnasioId = S.gimnasioId) {
 }
 
 function rutinaDeHoy() {
+  // LO QUE DIGA EL CALENDARIO MANDA. La rotación automática sigue existiendo
+  // para quien no quiere planificar nada, pero si Carlos ha puesto que hoy toca
+  // Pull, hoy toca Pull —y si ha puesto descanso, hoy no toca nada—. Una app
+  // que te propone entrenar el día que dijiste que descansabas no está
+  // ayudando, está estorbando.
+  const hoy = CAL.iso(new Date());
+  const puesto = CAL.delDia(hoy, { calendario: S.cache.calendario, sesiones: [] });
+  if (puesto.fuente === 'calendario') {
+    if (puesto.rutinaId === CAL.DESCANSO) return { rutina: null, elegida: true, descanso: true };
+    const r = S.cache.rutinas.find((x) => x.id === puesto.rutinaId);
+    if (r) return { rutina: r, elegida: true, delCalendario: true };
+  }
   // Solo las sesiones DE ESTE GIMNASIO: entrenar en Reus no debe mover la
   // rotación de Barcelona.
   const suyas = S.cache.sesiones.filter((s) => s.gimnasioId === S.gimnasioId);
@@ -276,7 +487,21 @@ async function fijarRutinaDeHoy(rutinaId) {
 
 /** Pinta la tarjeta «lo que toca hoy» encima de la lista de máquinas. */
 function pintarPlanDeHoy(zona) {
-  const { rutina, elegida } = rutinaDeHoy();
+  const { rutina, elegida, descanso } = rutinaDeHoy();
+  if (descanso) {
+    // Hoy toca descansar y lo dijiste tú. Se dice, y se deja la puerta abierta
+    // por si al final te apetece: prohibir no es el trabajo de la app.
+    zona.innerHTML = `
+      <div class="plan plan-descanso">
+        <div class="plan-etiqueta">Hoy en tu calendario</div>
+        <div class="plan-dia">Descanso</div>
+        <p class="plan-progreso" style="margin:6px 0 14px">Lo pusiste tú. Si al final entrenas, apunta lo que quieras: cuenta igual.</p>
+        <button class="boton boton-2" id="ver-calendario">Ver el calendario</button>
+      </div>`;
+    const b = $('#ver-calendario', zona);
+    if (b) b.onclick = () => irA('plan');
+    return;
+  }
   if (!rutina) {
     zona.innerHTML = '';
     return;
@@ -354,8 +579,10 @@ function abrirElegirDia() {
         <div class="dia-fila">
           <button class="dia-elegir ${rutina && r.id === rutina.id ? 'dia-actual' : ''}" data-dia="${r.id}">
             <span class="dia-nombre">${esc(r.nombre)}</span>
-            <span class="dia-cuantas">${planDe(r).length} ejercicios</span>
+            <span class="dia-cuantas">${planDe(r).length} ${planDe(r).length === 1 ? 'ejercicio' : 'ejercicios'}</span>
           </button>
+          <button class="boton-plano" data-compartir-dia="${r.id}" aria-label="Compartir ${esc(r.nombre)}">${icono('enviar', 18)}</button>
+          <button class="boton-plano" data-publicar-dia="${r.id}" aria-label="Publicar ${esc(r.nombre)} para todos">${icono('nube', 18)}</button>
           <button class="boton-plano" data-renombrar="${r.id}" aria-label="Renombrar ${esc(r.nombre)}">${icono('lapiz', 18)}</button>
           <button class="boton-plano" data-borrar-dia="${r.id}" aria-label="Borrar ${esc(r.nombre)}">${icono('papelera', 18)}</button>
         </div>`).join('');
@@ -364,6 +591,14 @@ function abrirElegirDia() {
         await fijarRutinaDeHoy(b.dataset.dia);
         cerrar();
         pintar();
+      }));
+      $$('[data-compartir-dia]', cuerpo).forEach((b) => (b.onclick = () => {
+        cerrar();
+        compartirRutina(b.dataset.compartirDia);
+      }));
+      $$('[data-publicar-dia]', cuerpo).forEach((b) => (b.onclick = () => {
+        cerrar();
+        publicarRutina(b.dataset.publicarDia);
       }));
       $$('[data-renombrar]', cuerpo).forEach((b) => (b.onclick = async () => {
         const r = S.cache.rutinas.find((x) => x.id === b.dataset.renombrar);
@@ -376,7 +611,7 @@ function abrirElegirDia() {
       }));
       $$('[data-borrar-dia]', cuerpo).forEach((b) => (b.onclick = async () => {
         const r = S.cache.rutinas.find((x) => x.id === b.dataset.borrarDia);
-        if (!confirm(`¿Borrar el día «${r.nombre}»? Las series apuntadas NO se tocan.`)) return;
+        if (!await preguntar(`¿Borrar el día «${r.nombre}»? Las series apuntadas NO se tocan.`)) return;
         await db.borrar('rutinas', r.id);
         await recargar();
         cerrar();
@@ -403,22 +638,81 @@ function abrirElegirDia() {
  * automático por cada toque, subir una fila de orden dispararía cuatro
  * escrituras y cuatro sincronizaciones.
  */
+/* --------------------------------------------------------------------------
+ * LAS NOTAS DE UN EJERCICIO  (1-sep-2026)
+ *
+ * Carlos: *«que si alguien se la descarga (…) se puedan ver las notas de la
+ * persona (tú también deberías poder añadir tus notas aunque no fuese tu rutina
+ * una vez te la descargas) y los vídeos o fotos que me haya añadido»*.
+ *
+ * SON DOS VOCES Y NO SE MEZCLAN.
+ *   · `nota`    — la escribió quien hizo la rutina. Se LEE, no se toca. Si la
+ *                 pudieras editar, mañana le estarías atribuyendo a otro algo
+ *                 que has escrito tú.
+ *   · `notaMia` — la tuya. Se escribe encima de la suya, no en su lugar, y no
+ *                 sale de este móvil ni cuando compartes la rutina.
+ *
+ * El vídeo es un ENLACE, no un vídeo alojado. La cuenta está en
+ * supabase/schema-6-notas-fotos.sql: alojarlo en el plan gratis agota la cuota
+ * de salida de TODA la app en 640 reproducciones.
+ * ------------------------------------------------------------------------ */
+function notasDeEjercicio(p, i, propia = false) {
+  return `
+    <div class="ed-notas ${p.notaMia ? 'abierta' : ''}">
+      ${p.foto ? `<img class="ed-foto" src="${esc(p.foto)}" alt="" loading="lazy">` : ''}
+      ${p.nota ? `<p class="ed-nota-suya">${icono('comentario', 15)} ${esc(p.nota)}</p>` : ''}
+      ${p.video
+        ? `<a class="ed-video" href="${esc(p.video)}" target="_blank" rel="noopener">
+             ${icono('video', 15)} Ver el vídeo que dejó</a>` : ''}
+      <textarea class="ed-nota-mia" rows="2" maxlength="300" data-nota-mia="${i}"
+                placeholder="Tu nota: el agujero del asiento, cómo te sale…"
+                aria-label="Tu nota para este ejercicio">${esc(p.notaMia || '')}</textarea>
+      <div class="ed-nota-botones">
+        <button type="button" class="boton-plano ed-nota-abre" data-abre-nota="${i}">
+          ${icono('lapiz', 15)} ${p.notaMia ? 'Tu nota' : 'Añadir tu nota'}</button>
+        ${propia ? `
+          <button type="button" class="boton-plano" data-nota-autor="${i}">
+            ${icono('comentario', 15)} ${p.nota ? 'Cambiar la explicación' : 'Explicarlo'}</button>
+          <button type="button" class="boton-plano" data-foto="${i}">
+            ${icono('camara', 15)} ${p.foto ? 'Cambiar la foto' : 'Foto'}</button>
+          <button type="button" class="boton-plano" data-video="${i}">
+            ${icono('video', 15)} ${p.video ? 'Cambiar el vídeo' : 'Vídeo'}</button>` : ''}
+      </div>
+    </div>`;
+}
+
 function abrirEditorPlan(rutinaId) {
   const rutina = S.cache.rutinas.find((r) => r.id === rutinaId);
   if (!rutina) return;
   let plan = planDe(rutina).map((p) => ({ ...p }));
+  // Las series y reps que salieron de «¿cuánto llevas entrenando?» en la
+  // bienvenida. Se leen UNA vez, al abrir: si no se usaran, esa pregunta no
+  // habría servido para nada, que es peor que no haberla hecho. Empieza con el
+  // 3×12 de siempre y se afina en cuanto conteste la base — para cuando alguien
+  // pulse «añadir» ya está, y si no, el valor de partida es el correcto.
+  let porDefecto = { ...PLAN_POR_DEFECTO };
+  seriesRepsPorDefecto(rutina).then((v) => { porDefecto = v; });
   // Solo se pregunta al salir si de verdad se ha tocado algo. Preguntar siempre
   // enseña a decir «sí» sin leer, y entonces el aviso deja de proteger nada.
   let tocado = false;
-  const porId = mapa(S.cache.maquinas);
+  // `let` y no `const` a propósito: desde el propio editor se pueden crear
+  // máquinas nuevas del catálogo, y entonces este índice se queda viejo y las
+  // filas recién añadidas se pintarían como «—».
+  let porId = mapa(S.cache.maquinas);
 
   hoja(
     `Editar ${rutina.nombre}`,
     `<div id="plan-lista"></div>
-     <div class="botonera"><button class="boton boton-2" id="plan-anadir">+ Añadir máquina</button></div>
+     <div class="botonera"><button class="boton boton-2" id="plan-anadir">+ Añadir máquinas</button></div>
      <button class="boton" id="plan-guardar">Guardar el día</button>`,
     (cuerpo, cerrar) => {
       const lista = $('#plan-lista', cuerpo);
+
+      // UNA RUTINA TRAÍDA DE OTRO NO SE REESCRIBE POR DENTRO. Puedes cambiarle
+      // las series, las reps y ponerle TUS notas, pero la explicación, la foto
+      // y el vídeo son de quien la hizo: si los pudieras editar, mañana le
+      // estarías atribuyendo a otro algo que has escrito tú.
+      const esMia = !rutina.autorNota;
 
       const pintarLista = () => {
         if (!plan.length) {
@@ -441,10 +735,70 @@ function abrirEditorPlan(rutinaId) {
                   <input type="number" inputmode="numeric" min="1" max="100" value="${p.reps}" data-reps="${i}" aria-label="Repeticiones">
                   <span class="ed-pista">series × reps</span>
                 </div>
+                ${notasDeEjercicio(p, i, esMia)}
               </div>
               <button class="boton-plano" data-quita="${i}" aria-label="Quitar">${icono('cerrar', 18)}</button>
             </div>`;
         }).join('');
+
+        // Las notas: la del autor se lee, la tuya se escribe.
+        $$('[data-nota-mia]', lista).forEach((c) => (c.oninput = () => {
+          plan[Number(c.dataset.notaMia)].notaMia = c.value.slice(0, 300);
+          tocado = true;
+        }));
+        $$('[data-abre-nota]', lista).forEach((b) => (b.onclick = () => {
+          const caja = $(`[data-nota-mia="${b.dataset.abreNota}"]`, lista);
+          if (!caja) return;
+          caja.closest('.ed-notas').classList.add('abierta');
+          caja.focus();
+        }));
+
+        // Y lo del autor, solo si la rutina es tuya.
+        $$('[data-nota-autor]', lista).forEach((b) => (b.onclick = async () => {
+          const i = Number(b.dataset.notaAutor);
+          const texto = prompt('¿Qué hay que saber de este ejercicio?\n\n'
+            + 'Esto lo lee quien se lleve tu rutina.', plan[i].nota || '');
+          if (texto === null) return;
+          plan[i].nota = texto.trim().slice(0, 300);
+          if (!plan[i].nota) delete plan[i].nota;
+          tocado = true;
+          pintarLista();
+        }));
+
+        $$('[data-video]', lista).forEach((b) => (b.onclick = () => {
+          const i = Number(b.dataset.video);
+          const url = prompt('Pega el enlace del vídeo (YouTube, Instagram o TikTok).\n\n'
+            + 'Un enlace y no el vídeo: alojar vídeo se comería la cuota de la app entera.',
+            plan[i].video || '');
+          if (url === null) return;
+          const limpio = comp.enlaceDeVideo(url);
+          if (url.trim() && !limpio) {
+            return aviso('Ese enlace no vale. Tiene que ser https de YouTube, Instagram o TikTok', 3600);
+          }
+          if (limpio) plan[i].video = limpio; else delete plan[i].video;
+          tocado = true;
+          pintarLista();
+        }));
+
+        $$('[data-foto]', lista).forEach((b) => (b.onclick = async () => {
+          const i = Number(b.dataset.foto);
+          if (!nube.usuario()) {
+            return aviso('Para que la foto la vea quien se lleve tu rutina hace falta cuenta', 3600);
+          }
+          const archivo = await pedirFoto({ camara: true });
+          if (!archivo) return;
+          // 1080 px y WebP: son ~150 KB. Ver la cuenta en
+          // supabase/schema-6-notas-fotos.sql — el cajón acepta 1 MB, y un
+          // límite generoso «por si acaso» es lo que hace que un día alguien
+          // suba cuarenta fotos de 2 MB y se acabe el gigabyte de todos.
+          const blob = await comprimir(archivo, 1080, 0.8, 'image/webp');
+          aviso('Subiendo la foto…', 2000);
+          const r = await nube.subirFotoRutina(blob);
+          if (!r.ok) return aviso(r.motivo, 3600);
+          plan[i].foto = r.url;
+          tocado = true;
+          pintarLista();
+        }));
 
         $$('[data-sube]', lista).forEach((b) => (b.onclick = () => {
           const i = Number(b.dataset.sube);
@@ -477,30 +831,23 @@ function abrirEditorPlan(rutinaId) {
       pintarLista();
 
       $('#plan-anadir', cuerpo).onclick = () => {
-        const dentro = new Set(plan.map((p) => p.maquinaId));
-        const libres = S.cache.maquinas
-          .filter((m) => m.gimnasioId === S.gimnasioId && !dentro.has(m.id))
-          .sort((a, b) => a.nombre.localeCompare(b.nombre));
-        if (!libres.length) {
-          aviso('Ya están todas las máquinas de este gimnasio');
-          return;
-        }
-        hoja(
-          'Añadir al día',
-          `<div class="lista">${libres.map((m) => `
-             <button class="elige-maquina" data-add="${m.id}">
-               <span>${esc(m.nombre)}</span>
-               <span class="elige-grupo">${esc((D.GRUPOS.find((g) => g.id === m.grupo) || {}).nombre || '')}</span>
-             </button>`).join('')}</div>`,
-          (c2, cerrar2) => {
-            $$('[data-add]', c2).forEach((b) => (b.onclick = () => {
-              plan.push({ maquinaId: b.dataset.add, ...PLAN_POR_DEFECTO });
-              tocado = true;
-              cerrar2();
-              pintarLista();
-            }));
-          }
-        );
+        abrirAnadirAlDia({
+          yaEnElDia: plan.map((p) => p.maquinaId),
+          alElegir: async (ids) => {
+            // `porDefecto` se lee al abrir el editor, no aquí. Ponerle un
+            // `await` a esta función dejaba un hueco entre cerrar la hoja de
+            // elegir y repintar la lista, y en ese hueco la lista todavía
+            // enseñaba lo de antes. Lo cazó `test_perfil_real.py` («se añaden
+            // LAS TRES de una vez: 1 -> 1»).
+            for (const id of ids) plan.push({ maquinaId: id, ...porDefecto });
+            tocado = true;
+            // El índice se rehace porque `alElegir` puede traer máquinas que
+            // acaban de nacer en el catálogo y que no estaban en la caché
+            // cuando se abrió este editor.
+            porId = mapa(S.cache.maquinas);
+            pintarLista();
+          },
+        });
       };
 
       $('#plan-guardar', cuerpo).onclick = async () => {
@@ -586,19 +933,14 @@ function pintarEntrenar(raiz) {
 
   raiz.innerHTML = `
     <div id="plan-hoy"></div>
-    <h3 class="seccion-titulo">Todas las máquinas</h3>
+    <h2 class="seccion-titulo">Todas las máquinas</h2>
     <div class="chips">${chips}</div>
     <input class="buscador" type="search" placeholder="Buscar máquina…" value="${esc(S.busqueda)}" id="buscador">
     <div class="lista" id="lista-maquinas"></div>
-    <div class="botonera" style="margin-top:18px">
-      <button class="boton" id="del-catalogo">+ Añadir del catálogo</button>
-    </div>
-    <div class="botonera" style="margin-top:8px">
-      <button class="boton boton-2" id="nueva-maquina">Crear una a mano</button>
-    </div>
-    <div style="margin-top:10px"><button class="boton-plano" id="marcar-dia" style="width:100%">
-      ${sesionHoyExcluida() ? 'Hoy está marcado como día flojo (no cuenta)' : 'Marcar hoy como día flojo'}
-    </button></div>`;
+    ${sesionHoyExcluida()
+      ? `<p class="chip-explica" style="margin-top:14px">Hoy está marcado como <b>día flojo</b>: no contará en las gráficas.
+         <button class="boton-plano" id="marcar-dia">Que sí cuente</button></p>`
+      : ''}`;
 
   // El plan de hoy va ARRIBA del todo: es lo que se mira nada más entrar al
   // gimnasio, y lo de abajo (todas las máquinas) es para lo que no estaba
@@ -696,9 +1038,8 @@ function pintarEntrenar(raiz) {
   $$('[data-registrar]', raiz).forEach((b) => (b.onclick = () => abrirRegistro(b.dataset.registrar)));
   $$('[data-ficha]', raiz).forEach((b) => (b.onclick = () => abrirFicha(b.dataset.ficha)));
   $$('[data-foto]', raiz).forEach((b) => (b.onclick = () => abrirFicha(b.dataset.foto)));
-  $('#nueva-maquina', raiz).onclick = () => editarMaquina(null);
-  $('#del-catalogo', raiz).onclick = abrirCatalogo;
-  $('#marcar-dia', raiz).onclick = alternarDiaFlojo;
+  const bFlojo = $('#marcar-dia', raiz);
+  if (bFlojo) bFlojo.onclick = alternarDiaFlojo;
 }
 
 /**
@@ -710,11 +1051,639 @@ function pintarEntrenar(raiz) {
  */
 function iconoDe(m) {
   const src = cat.rutaFoto(m.nombre);
-  if (src) return `<img class="ej-foto" src="${src}" alt="" loading="lazy" decoding="async">`;
+  if (src) return `<img class="ej-foto" src="${src}" alt="" width="64" height="64" loading="lazy" decoding="async">`;
   if (!m.icono) return icono('camara', 26);
   return `<span class="maquina-pict" style="color:${cat.COLOR_GRUPO[m.grupo] || 'var(--texto-2)'}">${
     cat.pictograma(m.icono)
   }</span>`;
+}
+
+
+/* ========================================================================== *
+ * PLAN — el calendario y los objetivos
+ *
+ * Carlos, 29-ago-2026: *«un calendario (…) para organizar los días y que la
+ * gente se pueda montar sus entrenamientos allí y verlo de manera muy clara»* y
+ * *«objetivos de pesos, calorías, kg levantados a x repes o simplemente pr»*.
+ *
+ * Las dos cosas viven juntas porque responden a la misma pregunta —qué voy a
+ * hacer— mientras que Entrenar y Progreso responden a qué estoy haciendo y qué
+ * he hecho. Las cuentas están en `calendario.js` y `metas.js`; aquí solo se
+ * pinta y se guarda.
+ * ========================================================================== */
+
+/** El mes que se está mirando. Empieza en el de hoy y se mueve con las flechas. */
+let _mesVisible = null;
+/** El día del que se está viendo el detalle. Empieza en hoy. */
+let _diaElegido = null;
+
+/**
+ * Qué tiene un día, con TODO lo que hace falta para contarlo: la rutina, sus
+ * máquinas con el objetivo de cada una, y lo que se hizo de verdad.
+ *
+ * Carlos, 30-ago-2026: *«que en el calendario se vea más información de la
+ * rutina que te toca (…) ahora solo se ve el día y eso no sirve de nada»*.
+ * Un calendario que solo dice «lunes: Push» te obliga a acordarte de qué es
+ * Push, que es justamente lo que la app tenía que quitarte de la cabeza.
+ */
+function detalleDelDia(fecha) {
+  const datos = datosCalendario();
+  const d = CAL.mes(fecha, datos).find((x) => x.fecha === fecha)
+    || { fecha, dia: Number(fecha.slice(-2)), series: 0 };
+  const rutina = S.cache.rutinas.find((r) => r.id === d.rutinaId) || null;
+  const plan = rutina ? planDe(rutina) : [];
+  const porId = mapa(S.cache.maquinas);
+  const ejercicios = plan.map((p) => ({
+    ...p,
+    nombre: (porId.get(p.maquinaId) || {}).nombre || 'Máquina borrada',
+  }));
+  // Las series de ESE día en esas máquinas: no vale el total del día, porque
+  // media hora de bici no es haber hecho el plan.
+  const delDia = S.cache.series.filter((x) => !x.del && P.dia(x.fecha) === fecha);
+  const hechasPorMaquina = new Map();
+  for (const x of delDia) hechasPorMaquina.set(x.maquinaId, (hechasPorMaquina.get(x.maquinaId) || 0) + 1);
+  const objetivo = ejercicios.reduce((n, e) => n + e.series, 0);
+  const hechasDelPlan = ejercicios.reduce(
+    (n, e) => n + Math.min(e.series, hechasPorMaquina.get(e.maquinaId) || 0), 0);
+  return {
+    ...d,
+    rutina,
+    ejercicios: ejercicios.map((e) => ({ ...e, hechas: hechasPorMaquina.get(e.maquinaId) || 0 })),
+    objetivo,
+    hechasDelPlan,
+    seriesDelDia: delDia.length,
+  };
+}
+
+function datosCalendario() {
+  return {
+    calendario: S.cache.calendario,
+    sesiones: S.cache.sesiones,
+    series: S.cache.series,
+    rutinas: S.cache.rutinas,
+    hoy: CAL.iso(new Date()),
+  };
+}
+
+/** El color de cada rutina, estable: la misma rutina, el mismo color siempre. */
+function colorRutina(rutinaId) {
+  if (rutinaId === CAL.DESCANSO) return 'var(--texto-tenue)';
+  const i = S.cache.rutinas.findIndex((r) => r.id === rutinaId);
+  if (i < 0) return 'var(--acento)';
+  return `var(--serie-${(i % 5) + 1})`;
+}
+
+function pintarPlan(raiz) {
+  const hoy = CAL.iso(new Date());
+  if (!_mesVisible) _mesVisible = hoy;
+
+  // El día del detalle vuelve a HOY cada vez que se entra en la pestaña: si se
+  // quedara en el que miraste ayer, abrirías Plan y verías el día equivocado.
+  if (!_diaElegido) _diaElegido = hoy;
+
+  raiz.innerHTML = `
+    <div id="zona-semana"></div>
+    <div id="zona-dia"></div>
+    <h2 class="seccion-titulo">Calendario</h2>
+    <div class="cal" id="zona-mes"></div>
+    <h2 class="seccion-titulo">Objetivos</h2>
+    <div id="zona-metas"></div>`;
+
+  pintarSemana($('#zona-semana', raiz));
+  pintarDia($('#zona-dia', raiz));
+  pintarMes($('#zona-mes', raiz));
+  pintarMetas($('#zona-metas', raiz));
+}
+
+/* --------------------------------------------------------------------------
+ * LA SEMANA — la tira de arriba, que es lo que se mira a diario
+ * ------------------------------------------------------------------------ */
+function pintarSemana(zona) {
+  const hoy = CAL.iso(new Date());
+  const lunes = CAL.lunesDe(hoy);
+  const datos = datosCalendario();
+  const delMes = CAL.mes(lunes, datos);
+  const porFecha = new Map(delMes.map((d) => [d.fecha, d]));
+  const r = CAL.resumenSemana(lunes, datos);
+
+  // Cuántos ejercicios trae cada rutina, para poder decirlo en la tira. Se
+  // calcula una vez por rutina y no una por día: siete llamadas a `planDe` con
+  // el catálogo entero por medio se notan al pintar.
+  const ejerciciosDe = new Map(S.cache.rutinas.map((r) => [r.id, planDe(r).length]));
+
+  const dias = Array.from({ length: 7 }, (_, i) => {
+    const f = CAL.sumarDias(lunes, i);
+    const d = porFecha.get(f) || { fecha: f, dia: Number(f.slice(-2)) };
+    const clases = ['sem-dia'];
+    if (d.esHoy) clases.push('sem-hoy');
+    if (f === _diaElegido) clases.push('sem-elegido');
+    if (d.entrenado) clases.push('sem-entrenado');
+    if (d.descanso) clases.push('sem-descanso');
+    if (d.saltado) clases.push('sem-saltado');
+    // La tercera línea es la que hacía falta: un día que solo dice «Push» te
+    // obliga a acordarte de qué es Push. Si entrenaste manda lo HECHO —es el
+    // dato— y si no, lo que te espera.
+    const nEj = ejerciciosDe.get(d.rutinaId) || 0;
+    const pie = d.entrenado ? `${d.series} ser.` : d.descanso ? '' : nEj ? `${nEj} ej.` : '';
+    return `
+      <button class="${clases.join(' ')}" data-dia="${f}" style="--color:${colorRutina(d.rutinaId)}"
+        aria-pressed="${f === _diaElegido}"
+        aria-label="${CAL.DIAS[i]} ${d.dia}${d.nombre ? ', ' + esc(d.nombre) : ''}${
+          d.entrenado ? `, ${d.series} series hechas` : nEj ? `, ${nEj} ejercicios` : ''}">
+        <span class="sem-letra">${CAL.DIAS[i]}</span>
+        <span class="sem-num">${d.dia}</span>
+        <span class="sem-marca">${d.rutinaId ? (d.descanso ? 'Libre' : esc(d.nombre || '?')) : '—'}</span>
+        <span class="sem-pie">${pie}</span>
+      </button>`;
+  }).join('');
+
+  zona.innerHTML = `
+    <div class="ficha semana-tarjeta">
+      <div class="semana-cabeza">
+        <div class="plan-etiqueta">Esta semana</div>
+        <button class="boton-plano" id="repetir-semana">Repetir</button>
+      </div>
+      <div class="semana-resumen">
+        <span><b>${r.entrenados}</b> ${r.entrenados === 1 ? 'día entrenado' : 'días entrenados'}</span>
+        ${r.planeados ? `<span>${r.planeados} en el plan</span>` : ''}
+        ${r.saltados ? `<span class="semana-saltados">${r.saltados} saltado${r.saltados === 1 ? '' : 's'}</span>` : ''}
+      </div>
+      <div class="semana-tira">${dias}</div>
+    </div>`;
+
+  // Tocar un día de la TIRA lo elige y enseña su detalle debajo; el editor se
+  // abre desde ahí. En el MES sigue abriendo el editor directamente, que es
+  // donde se monta la semana y donde un toque de más por día se nota.
+  $$('[data-dia]', zona).forEach((b) => (b.onclick = () => {
+    _diaElegido = b.dataset.dia;
+    tocar(6);
+    pintarSemana(zona);
+    pintarDia($('#zona-dia'));
+  }));
+  $('#repetir-semana', zona).onclick = () => abrirRepetirSemana(lunes);
+}
+
+/* --------------------------------------------------------------------------
+ * EL DÍA — qué toca de verdad, no solo cómo se llama
+ * ------------------------------------------------------------------------ *
+ * Carlos, 30-ago-2026: *«que en el calendario se vea más información de la
+ * rutina que te toca (…) ahora solo se ve el día y eso no sirve de nada»*.
+ *
+ * Aquí sale la rutina del día elegido CON SUS MÁQUINAS y el objetivo de cada
+ * una (3×12), y si ya entrenaste, cuánto llevas hecho de eso. Es la diferencia
+ * entre «el lunes toca Push» y «el lunes toca Push: press militar 3×12,
+ * elevaciones 3×12, press de banca 3×12».
+ * ------------------------------------------------------------------------ */
+function pintarDia(zona) {
+  if (!zona) return;
+  const fecha = _diaElegido || CAL.iso(new Date());
+  const hoy = CAL.iso(new Date());
+  const d = detalleDelDia(fecha);
+  const f = CAL.fechaDe(fecha);
+  const cuando = fecha === hoy ? 'Hoy'
+    : fecha === CAL.sumarDias(hoy, 1) ? 'Mañana'
+    : fecha === CAL.sumarDias(hoy, -1) ? 'Ayer'
+    : CAL.DIAS_LARGOS[CAL.diaSemana(fecha)];
+  const titulo = `${cuando} · ${d.dia} de ${CAL.MESES[f.getMonth()].toLowerCase()}`;
+
+  // Sin nada puesto: un hueco no es un error, pero tampoco puede ser una
+  // tarjeta vacía. Se dice y se ofrece el botón que lo arregla.
+  if (!d.rutinaId) {
+    zona.innerHTML = `
+      <div class="ficha dia-tarjeta dia-vacio">
+        <div class="dia-cabeza">
+          <div><div class="plan-etiqueta">${esc(titulo)}</div>
+            <div class="dia-nombre dia-nombre-vacio">Sin nada puesto</div></div>
+          <button class="boton-plano" data-editar>Poner rutina</button>
+        </div>
+        ${d.seriesDelDia
+          ? `<p class="dia-nota">Ese día entrenaste igualmente: <b>${d.seriesDelDia} series</b>.</p>`
+          : '<p class="dia-nota">Elige qué toca y la app te lo recuerda al llegar el día.</p>'}
+      </div>`;
+    cablearDia(zona, fecha);
+    return;
+  }
+
+  if (d.descanso) {
+    zona.innerHTML = `
+      <div class="ficha dia-tarjeta plan-descanso">
+        <div class="dia-cabeza">
+          <div><div class="plan-etiqueta">${esc(titulo)}</div>
+            <div class="dia-nombre">Descanso</div></div>
+          <button class="boton-plano" data-editar>Cambiar</button>
+        </div>
+        <p class="dia-nota">Ni te lo propongo ese día. Descansar es parte del plan.</p>
+      </div>`;
+    cablearDia(zona, fecha);
+    return;
+  }
+
+  const pct = d.objetivo ? Math.round((d.hechasDelPlan / d.objetivo) * 100) : 0;
+  const MAX = 5;   // más de cinco filas y la tarjeta deja de leerse de un vistazo
+  const filas = d.ejercicios.slice(0, MAX).map((e) => `
+    <li class="dia-ej ${e.hechas >= e.series ? 'dia-ej-hecho' : ''}">
+      <span class="dia-ej-nombre">${esc(e.nombre)}</span>
+      <span class="dia-ej-obj">${e.series}×${e.reps}</span>
+      ${e.hechas ? `<span class="dia-ej-hechas">${Math.min(e.hechas, e.series)}/${e.series}</span>` : ''}
+    </li>`).join('');
+  const restan = d.ejercicios.length - MAX;
+
+  zona.innerHTML = `
+    <div class="ficha dia-tarjeta" style="--color:${colorRutina(d.rutinaId)}">
+      <div class="dia-cabeza">
+        <div>
+          <div class="plan-etiqueta">${esc(titulo)}</div>
+          <div class="dia-nombre">${esc(d.nombre)}</div>
+        </div>
+        <button class="boton-plano" data-editar>Cambiar</button>
+      </div>
+      <div class="dia-resumen">
+        <span><b>${d.ejercicios.length}</b> ${d.ejercicios.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
+        <span><b>${d.objetivo}</b> series objetivo</span>
+        ${d.entrenado ? `<span class="dia-hechas"><b>${d.hechasDelPlan}</b> hechas</span>` : ''}
+        ${d.saltado ? '<span class="semana-saltados">saltado</span>' : ''}
+      </div>
+      ${d.objetivo ? `<div class="dia-barra"><i style="width:${Math.min(100, pct)}%"></i></div>` : ''}
+      ${filas ? `<ul class="dia-lista">${filas}</ul>` : '<p class="dia-nota">Esta rutina no tiene máquinas en este gimnasio.</p>'}
+      ${restan > 0 ? `<p class="dia-mas">y ${restan} ${restan === 1 ? 'ejercicio más' : 'ejercicios más'}</p>` : ''}
+      ${fecha === hoy ? '<button class="boton" data-entrenar style="margin-top:12px">Entrenar esto</button>' : ''}
+    </div>`;
+  cablearDia(zona, fecha);
+}
+
+function cablearDia(zona, fecha) {
+  const ed = $('[data-editar]', zona);
+  if (ed) ed.onclick = () => abrirDia(fecha);
+  const en = $('[data-entrenar]', zona);
+  if (en) en.onclick = () => irA('entrenar');
+}
+
+/* --------------------------------------------------------------------------
+ * EL MES
+ * ------------------------------------------------------------------------ */
+function pintarMes(zona) {
+  const datos = datosCalendario();
+  const dias = CAL.mes(_mesVisible, datos);
+  const f = CAL.fechaDe(_mesVisible);
+  const titulo = `${CAL.MESES[f.getMonth()]} ${f.getFullYear()}`;
+
+  const celdas = dias.map((d, i) => {
+    const clases = ['cal-dia'];
+    if (!d.delMes) clases.push('cal-fuera');
+    if (d.esHoy) clases.push('cal-hoy');
+    if (d.entrenado) clases.push('cal-entrenado');
+    if (d.descanso) clases.push('cal-descanso');
+    if (d.saltado) clases.push('cal-saltado');
+    if (d.rutinaId && !d.descanso) clases.push('cal-planeado');
+    return `
+      <button class="${clases.join(' ')}" data-dia="${d.fecha}" style="--color:${colorRutina(d.rutinaId)};--i:${i}"
+        aria-label="${d.dia} de ${CAL.MESES[CAL.fechaDe(d.fecha).getMonth()]}${d.nombre ? ', ' + esc(d.nombre) : ''}${d.entrenado ? ', entrenado' : ''}">
+        <span class="cal-num">${d.dia}</span>
+        ${d.rutinaId && !d.descanso ? `<span class="cal-etiqueta">${esc((d.nombre || '').slice(0, 4))}</span>` : ''}
+        ${d.descanso ? '<span class="cal-etiqueta cal-desc">descanso</span>' : ''}
+        ${d.entrenado ? '<span class="cal-punto"></span>' : ''}
+      </button>`;
+  }).join('');
+
+  zona.innerHTML = `
+    <div class="cal-cabeza">
+      <button class="cal-flecha" id="mes-antes" aria-label="Mes anterior">${icono('izquierda', 20)}</button>
+      <div class="cal-titulo">${titulo}</div>
+      ${_mesVisible.slice(0, 7) !== CAL.iso(new Date()).slice(0, 7)
+        ? '<button class="boton-plano" id="mes-hoy">Hoy</button>'
+        : ''}
+      <button class="cal-flecha" id="mes-despues" aria-label="Mes siguiente">${icono('derecha', 20)}</button>
+    </div>
+    <div class="cal-semana">${CAL.DIAS.map((d) => `<span>${d}</span>`).join('')}</div>
+    <div class="cal-rejilla">${celdas}</div>
+    <div class="cal-leyenda">
+      <span class="cal-ley"><i class="ley-entrenado"></i> entrenado</span>
+      <span class="cal-ley"><i class="ley-planeado"></i> en el plan</span>
+      <span class="cal-ley"><i class="ley-saltado"></i> saltado</span>
+    </div>`;
+
+  $('#mes-antes', zona).onclick = () => { _mesVisible = CAL.sumarMeses(_mesVisible, -1); pintarMes(zona); tocar(6); };
+  $('#mes-despues', zona).onclick = () => { _mesVisible = CAL.sumarMeses(_mesVisible, 1); pintarMes(zona); tocar(6); };
+  // Volver al mes de hoy sin ir tocando la flecha nueve veces. Solo aparece
+  // cuando estás en otro mes, que es cuando sirve.
+  const bHoy = $('#mes-hoy', zona);
+  if (bHoy) bHoy.onclick = () => { _mesVisible = CAL.iso(new Date()); pintarMes(zona); tocar(6); };
+  $$('[data-dia]', zona).forEach((b) => (b.onclick = () => abrirDia(b.dataset.dia)));
+}
+
+/** Poner (o quitar) lo que toca un día. */
+function abrirDia(fecha) {
+  // El día que se toca pasa a ser el del detalle: al cerrar la hoja, la tarjeta
+  // de abajo enseña justo el día que acabas de tocar, no el de antes.
+  _diaElegido = fecha;
+  const d = CAL.fechaDe(fecha);
+  const puesto = S.cache.calendario.find((c) => !c.del && c.fecha === fecha);
+  const hoy = CAL.iso(new Date());
+  const cuando = fecha === hoy ? 'Hoy' : fecha === CAL.sumarDias(hoy, 1) ? 'Mañana' : null;
+  const titulo = cuando || `${CAL.DIAS[CAL.diaSemana(fecha)]} ${d.getDate()} de ${CAL.MESES[d.getMonth()]}`;
+
+  // Lo que YA hay puesto ese día, arriba del todo y con detalle: desde el mes se
+  // llega aquí sin haber visto nada del día, y elegir a ciegas es cómo se acaba
+  // pisando un plan que ya estaba bien.
+  const det = detalleDelDia(fecha);
+  const resumen = det.rutinaId && !det.descanso
+    ? `<div class="hoja-dia">
+         <span class="hoja-dia-color" style="background:${colorRutina(det.rutinaId)}"></span>
+         <div>
+           <b>${esc(det.nombre)}</b>
+           <small>${det.ejercicios.length} ${det.ejercicios.length === 1 ? 'ejercicio' : 'ejercicios'} ·
+             ${det.objetivo} series${det.entrenado ? ` · ${det.hechasDelPlan} hechas` : ''}</small>
+           ${det.ejercicios.length
+             ? `<small class="hoja-dia-ejs">${det.ejercicios.map((e) => esc(e.nombre)).join(' · ')}</small>`
+             : ''}
+         </div>
+       </div>`
+    : det.descanso
+      ? '<div class="hoja-dia"><span class="hoja-dia-color" style="background:var(--texto-tenue)"></span><div><b>Descanso</b><small>ese día no te propongo nada</small></div></div>'
+      : '';
+
+  hoja(titulo, `
+    ${resumen}
+    <div class="hoja-lista">
+      ${S.cache.rutinas.map((r) => {
+        const n = planDe(r).length;
+        return `
+        <button class="hoja-op" data-poner="${r.id}" aria-current="${puesto && puesto.rutinaId === r.id}">
+          <span class="op-color" style="background:${colorRutina(r.id)}"></span>
+          <span>${esc(r.nombre)}<small>${n} ${n === 1 ? 'máquina' : 'máquinas'}${
+            n ? ' · ' + planDe(r).reduce((a, x) => a + x.series, 0) + ' series' : ''}</small></span>
+          ${puesto && puesto.rutinaId === r.id ? icono('tic', 20) : ''}
+        </button>`;
+      }).join('')}
+      <button class="hoja-op" data-poner="${CAL.DESCANSO}" aria-current="${puesto && puesto.rutinaId === CAL.DESCANSO}">
+        <span class="op-color" style="background:var(--texto-tenue)"></span>
+        <span>Descanso<small>ni te lo propongo ese día</small></span>
+        ${puesto && puesto.rutinaId === CAL.DESCANSO ? icono('tic', 20) : ''}
+      </button>
+    </div>
+    ${puesto ? '<button class="boton boton-2" id="quitar-dia" style="margin-top:14px">Quitar del calendario</button>' : ''}`,
+    (cuerpo, cerrar) => {
+      $$('[data-poner]', cuerpo).forEach((b) => (b.onclick = async () => {
+        const rutinaId = b.dataset.poner;
+        // Volver a tocar lo que ya estaba puesto lo quita: es lo que espera
+        // cualquiera y evita tener que buscar el botón de borrar.
+        if (puesto && puesto.rutinaId === rutinaId) {
+          await db.guardar('calendario', { ...puesto, del: 1 });
+        } else if (puesto) {
+          await db.guardar('calendario', { ...puesto, rutinaId });
+        } else {
+          await db.guardar('calendario', { fecha, rutinaId, nota: '' });
+        }
+        await recargar();
+        cerrar();
+        tocar();
+        pintar();
+        sync.sincronizar({ silencioso: true });
+      }));
+      const bQuitar = $('#quitar-dia', cuerpo);
+      if (bQuitar) bQuitar.onclick = async () => {
+        await db.guardar('calendario', { ...puesto, del: 1 });
+        await recargar();
+        cerrar();
+        pintar();
+        sync.sincronizar({ silencioso: true });
+      };
+    });
+}
+
+/** Copiar la semana montada a las siguientes. */
+function abrirRepetirSemana(lunes) {
+  hoja('Repetir esta semana', `
+    <p class="campo-nota" style="margin:0 0 16px">Se copia lo que hayas puesto de lunes a domingo a las semanas
+      siguientes. Lo que ya tengas puesto en esas semanas <b>no se toca</b>.</p>
+    <div class="chips chips-compacto" style="margin-left:0;margin-right:0;padding-left:0">
+      ${[1, 2, 3, 4].map((n) => `<button class="chip" data-semanas="${n}">${n} ${n === 1 ? 'semana' : 'semanas'}</button>`).join('')}
+    </div>`, (cuerpo, cerrar) => {
+    $$('[data-semanas]', cuerpo).forEach((b) => (b.onclick = async () => {
+      const semanas = Number(b.dataset.semanas);
+      const nuevos = CAL.repetirSemana(lunes, { calendario: S.cache.calendario, semanas });
+      let puestos = 0;
+      for (const n of nuevos) {
+        // Lo que ya esté puesto NO se pisa: repetir no puede borrar un plan que
+        // ya habías hecho a mano para la semana que viene.
+        if (S.cache.calendario.some((c) => !c.del && c.fecha === n.fecha)) continue;
+        await db.guardar('calendario', n);
+        puestos++;
+      }
+      await recargar();
+      cerrar();
+      pintar();
+      aviso(puestos ? `${puestos} días copiados` : 'Esas semanas ya estaban montadas');
+      sync.sincronizar({ silencioso: true });
+    }));
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * LOS OBJETIVOS
+ * ------------------------------------------------------------------------ */
+function datosMetas() {
+  return {
+    series: S.cache.series,
+    pesos: S.cache.pesos,
+    comidas: S.cache.comidas,
+    maquinas: S.cache.maquinas,
+  };
+}
+
+function pintarMetas(zona) {
+  const vivas = S.cache.metas.filter((m) => !m.del);
+  if (!vivas.length) {
+    zona.innerHTML = `<div class="vacio">
+      <span class="vacio-icono">${icono('fuego', 34)}</span>
+      <p>Ponte un objetivo y la app te dice sola cuánto llevas.<br>
+         Bajar a 74 kg, hacer press de banca a 80×8, batir un récord…</p>
+      <button class="boton" id="meta-nueva">Ponerme un objetivo</button>
+    </div>`;
+    $('#meta-nueva', zona).onclick = () => editarMeta(null);
+    return;
+  }
+
+  const datos = datosMetas();
+  const progresos = new Map(vivas.map((m) => [m.id, MET.progreso(m, datos)]));
+  const orden = MET.ordenar(vivas, progresos);
+  const hoy = CAL.iso(new Date());
+
+  zona.innerHTML = orden.map((m, i) => {
+    const p = progresos.get(m.id);
+    const dias = MET.diasQueQuedan(m, hoy);
+    const R = 26, C = 2 * Math.PI * R;
+    return `
+      <button class="meta ${p.hecha ? 'meta-hecha' : ''}" data-meta="${m.id}" style="--i:${i}">
+        <span class="meta-aro">
+          <svg viewBox="0 0 64 64" aria-hidden="true">
+            <circle class="meta-carril" cx="32" cy="32" r="${R}"></circle>
+            <circle class="meta-relleno" cx="32" cy="32" r="${R}"
+              stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}"
+              data-hasta="${(C * (1 - p.pct)).toFixed(1)}"></circle>
+          </svg>
+          <span class="meta-pct">${p.hecha ? icono('tic', 18) : Math.round(p.pct * 100) + '%'}</span>
+        </span>
+        <span class="meta-txt">
+          <span class="meta-titulo">${esc(m.titulo || tituloDeMeta(m))}</span>
+          <span class="meta-detalle">${esc(p.texto)}</span>
+          ${dias !== null && !p.hecha
+            ? `<span class="meta-plazo ${dias < 0 ? 'meta-tarde' : ''}">${
+                dias < 0 ? `se pasó hace ${-dias} días` : dias === 0 ? 'se acaba hoy' : `quedan ${dias} días`}</span>`
+            : ''}
+        </span>
+      </button>`;
+  }).join('');
+
+  $$('[data-meta]', zona).forEach((b) => (b.onclick = () => {
+    const m = S.cache.metas.find((x) => x.id === b.dataset.meta);
+    if (m) editarMeta(m);
+  }));
+}
+
+/** El título por defecto de una meta, si no le pusiste uno. */
+function tituloDeMeta(m) {
+  const maq = S.cache.maquinas.find((x) => x.id === m.maquinaId);
+  const nombre = maq ? maq.nombre : 'una máquina';
+  if (m.tipo === 'peso') return `Llegar a ${m.objetivo} kg`;
+  if (m.tipo === 'kcal') return `${m.objetivo} kcal al día`;
+  if (m.tipo === 'levantamiento') return `${nombre}: ${m.objetivo} × ${m.reps}`;
+  if (m.tipo === 'pr') return `Batir mi récord en ${nombre}`;
+  return 'Objetivo';
+}
+
+/** Crear o cambiar un objetivo. */
+function editarMeta(meta) {
+  const nuevo = !meta;
+  let tipo = meta ? meta.tipo : 'peso';
+  let maquinaId = meta ? meta.maquinaId : null;
+
+  const cuerpoHTML = () => {
+    const t = MET.tipoDe(tipo);
+    const maq = S.cache.maquinas.find((x) => x.id === maquinaId);
+    const pesoUlt = [...S.cache.pesos].filter((p) => !p.del).sort((a, b) => a.fecha.localeCompare(b.fecha)).pop();
+    return `
+      <div class="chips chips-compacto" style="margin-left:0;margin-right:0;padding-left:0" id="tipos">
+        ${MET.TIPOS.map((x) => `<button class="chip" data-tipo="${x.id}" aria-pressed="${x.id === tipo}">${x.nombre}</button>`).join('')}
+      </div>
+      <p class="campo-nota" style="margin:0 0 16px">${MET.tipoDe(tipo).explica}</p>
+
+      ${t.pide.includes('maquinaId') ? `
+        <button class="selector-linea" id="meta-maquina" type="button">
+          <span class="sel-nombre">${maq ? esc(maq.nombre) : 'Elegir máquina'}</span>
+          <span class="sel-pista">${maq ? 'cambiar' : 'obligatorio'}</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </button>` : ''}
+
+      ${t.pide.includes('objetivo') ? `
+        <div class="campo-fila">
+          <div class="campo">
+            <label for="meta-obj">${tipo === 'kcal' ? 'Calorías al día' : tipo === 'peso' ? 'Peso al que quiero llegar' : 'Peso a levantar'}</label>
+            <input id="meta-obj" type="number" inputmode="decimal" step="any"
+              value="${meta ? meta.objetivo : tipo === 'kcal' ? 2400 : tipo === 'peso' && pesoUlt ? Math.round(pesoUlt.kg - 3) : ''}">
+          </div>
+          ${t.pide.includes('reps') ? `
+            <div class="campo">
+              <label for="meta-reps">Repeticiones</label>
+              <input id="meta-reps" type="number" inputmode="numeric" step="1" value="${meta ? meta.reps || 8 : 8}">
+            </div>` : ''}
+        </div>` : ''}
+
+      <div class="campo">
+        <label for="meta-fecha">Para cuándo <small style="font-weight:400;color:var(--texto-tenue)">(opcional)</small></label>
+        <input id="meta-fecha" type="date" value="${meta && meta.fecha_limite ? meta.fecha_limite : ''}">
+      </div>
+      <div class="campo">
+        <label for="meta-titulo">Cómo llamarlo <small style="font-weight:400;color:var(--texto-tenue)">(opcional)</small></label>
+        <input id="meta-titulo" type="text" placeholder="Se pone solo si lo dejas vacío"
+          value="${meta && meta.titulo ? esc(meta.titulo) : ''}">
+      </div>
+
+      <button class="boton" id="meta-guardar">${nuevo ? 'Ponerme el objetivo' : 'Guardar'}</button>
+      ${nuevo ? '' : '<button class="boton boton-peligro" id="meta-borrar" style="margin-top:10px">Borrar el objetivo</button>'}`;
+  };
+
+  hoja(nuevo ? 'Nuevo objetivo' : 'El objetivo', cuerpoHTML(), function montar(cuerpo, cerrar) {
+    const rehacer = () => {
+      cuerpo.innerHTML = cuerpoHTML();
+      montar(cuerpo, cerrar);
+    };
+
+    $$('[data-tipo]', cuerpo).forEach((b) => (b.onclick = () => {
+      tipo = b.dataset.tipo;
+      rehacer();
+    }));
+
+    const bMaq = $('#meta-maquina', cuerpo);
+    if (bMaq) bMaq.onclick = () => {
+      const suyas = S.cache.maquinas.filter((m) => m.gimnasioId === S.gimnasioId);
+      hoja('¿Qué máquina?', `
+        <input class="buscador" type="search" id="bm" placeholder="Buscar máquina…" autocomplete="off">
+        <div class="hoja-lista" id="lm"></div>`, (c2, cerrar2) => {
+        const lista = $('#lm', c2);
+        const pinta = (q = '') => {
+          const filtro = quitarTildes(q.trim().toLowerCase());
+          const vistas = suyas.filter((m) => !filtro || quitarTildes(m.nombre.toLowerCase()).includes(filtro));
+          lista.innerHTML = vistas.length
+            ? vistas.map((m) => `<button class="hoja-op" data-m="${m.id}"><span>${esc(m.nombre)}</span></button>`).join('')
+            : '<p class="grafica-vacia">Ninguna con ese nombre.</p>';
+          $$('[data-m]', lista).forEach((b) => (b.onclick = () => {
+            maquinaId = b.dataset.m;
+            cerrar2();
+            rehacer();
+          }));
+        };
+        pinta();
+        $('#bm', c2).oninput = (e) => pinta(e.target.value);
+      });
+    };
+
+    $('#meta-guardar', cuerpo).onclick = async () => {
+      const t = MET.tipoDe(tipo);
+      const objetivo = Number(($('#meta-obj', cuerpo) || {}).value) || 0;
+      if (t.pide.includes('maquinaId') && !maquinaId) return aviso('Elige la máquina');
+      if (t.pide.includes('objetivo') && objetivo <= 0) return aviso('Pon el número al que quieres llegar');
+
+      const pesos = S.cache.pesos.filter((p) => !p.del).sort((a, b) => a.fecha.localeCompare(b.fecha));
+      const series = S.cache.series.filter((s) => !s.del && s.maquinaId === maquinaId);
+      const datos = {
+        ...(meta || {}),
+        tipo,
+        titulo: ($('#meta-titulo', cuerpo).value || '').trim(),
+        objetivo,
+        unidad: t.unidad,
+        maquinaId: t.pide.includes('maquinaId') ? maquinaId : null,
+        reps: t.pide.includes('reps') ? Number($('#meta-reps', cuerpo).value) || 8 : null,
+        fecha_limite: $('#meta-fecha', cuerpo).value || '',
+        hecha: 0,
+        creado: meta ? meta.creado : Date.now(),
+        // DE DÓNDE SALES. Sin esto, «bajar a 74» se vería al 95 % desde el
+        // primer día, y batir un récord se daría por hecho con el récord que ya
+        // tenías. El punto de partida se congela al crear el objetivo.
+        partida: meta ? meta.partida
+          : tipo === 'peso' ? (pesos.length ? pesos[pesos.length - 1].kg : objetivo)
+          : tipo === 'pr' ? series.reduce((a, x) => Math.max(a, Number(x.peso) || 0), 0)
+          : null,
+      };
+      await db.guardar('metas', datos);
+      await recargar();
+      cerrar();
+      tocar();
+      aviso(nuevo ? 'Objetivo puesto' : 'Objetivo guardado');
+      pintar();
+      sync.sincronizar({ silencioso: true });
+    };
+
+    const bBorrar = $('#meta-borrar', cuerpo);
+    if (bBorrar) bBorrar.onclick = async () => {
+      if (!await preguntar('¿Borrar este objetivo?')) return;
+      await db.guardar('metas', { ...meta, del: 1 });
+      await recargar();
+      cerrar();
+      pintar();
+      sync.sincronizar({ silencioso: true });
+    };
+  });
 }
 
 /* ========================================================================== *
@@ -734,11 +1703,11 @@ function abrirCatalogo() {
   let consulta = '';
 
   hoja(
-    `Catálogo · ${gim.nombre}`,
+    'Catálogo de ejercicios',
     `
-    <p class="campo-nota" style="margin-top:0">
-      Toca las que tengas en este gimnasio y añádelas todas de una vez. Luego, si
-      quieres, les haces la foto real desde su ficha.</p>
+    <p class="campo-nota" style="margin:0 0 16px">
+      Toca las que tengas en <b>${esc(gim.nombre)}</b> y añádelas todas de una vez.
+      Luego, si quieres, les haces la foto real desde su ficha.</p>
     <div class="campo" style="margin-bottom:8px">
       <label>Unidad de las placas de este gimnasio</label>
       <div class="chips" style="margin:0;padding-left:0;padding-right:0">
@@ -939,22 +1908,22 @@ async function abrirRegistro(maquinaId, objetivo = null) {
     ${objetivo ? `<div class="objetivo" id="objetivo"></div>` : ''}
     <div class="contador-etiqueta">Peso</div>
     <div class="contador">
-      <button class="contador-boton" data-p="-">−</button>
+      <button class="contador-boton" data-p="-" aria-label="Quitar ${paso} ${unidad}">−</button>
       <div class="contador-valor">
         <input class="contador-numero" id="c-peso" type="number" inputmode="decimal" step="any">
         <div class="contador-unidad">${unidad}</div>
       </div>
-      <button class="contador-boton" data-p="+">+</button>
+      <button class="contador-boton" data-p="+" aria-label="Añadir ${paso} ${unidad}">+</button>
     </div>
 
     <div class="contador-etiqueta" style="margin-top:14px">Repeticiones</div>
     <div class="contador">
-      <button class="contador-boton" data-r="-">−</button>
+      <button class="contador-boton" data-r="-" aria-label="Una repetición menos">−</button>
       <div class="contador-valor">
         <input class="contador-numero" id="c-reps" type="number" inputmode="numeric" step="1">
         <div class="contador-unidad">reps</div>
       </div>
-      <button class="contador-boton" data-r="+">+</button>
+      <button class="contador-boton" data-r="+" aria-label="Una repetición más">+</button>
     </div>
 
     <p class="pista-anterior" id="pista"></p>
@@ -1010,6 +1979,10 @@ async function abrirRegistro(maquinaId, objetivo = null) {
       iReps.oninput = () => (reps = Math.max(1, Number(iReps.value) || 1));
 
       const guardar = async () => {
+        // La foto de ANTES, para saber si esta serie desbloquea algo. Se hace
+        // aquí y no después: `recargar()` ya deja el cálculo nuevo, y sin el
+        // anterior no hay con qué comparar.
+        const medallasAntes = fotoDeMedallas(calculoPerfil());
         const ses = await sesionDeHoy(m.gimnasioId);
         // La rotación avanza cuando se ENTRENA, no cuando pasa un día. Si hoy
         // se apunta algo y no se ha elegido día a mano, queda escrito el que
@@ -1039,17 +2012,28 @@ async function abrirRegistro(maquinaId, objetivo = null) {
         const zonaPlan = $('#plan-hoy');
         if (zonaPlan) pintarPlanDeHoy(zonaPlan);
         sync.sincronizar({ silencioso: true });
+        // Las MEDALLAS las celebra `celebrarSiHayNuevas` con la foto de antes
+        // (la fiesta de la 0.22.0). Las INSIGNIAS no las celebraba nadie, y se
+        // enseñan en la siguiente pintada que no tenga una hoja delante.
+        await comprobarLogros();
+        return medallasAntes;
       };
 
       $('#guardar-serie', cuerpo).onclick = async () => {
-        await guardar();
+        const antes = await guardar();
         cerrar();
-        aviso(`Guardado: ${D.formatearPeso(peso, unidad)} × ${reps}`);
         pintar();
+        // La celebración manda sobre el aviso: si ha caído una medalla, el
+        // «Guardado: 100 kg × 8» sobra y encima taparía la pieza.
+        if (!celebrarSiHayNuevas(antes, calculoPerfil())) {
+          aviso(`Guardado: ${D.formatearPeso(peso, unidad)} × ${reps}`);
+        }
       };
       $('#guardar-otra', cuerpo).onclick = async () => {
-        await guardar();
-        aviso(`Serie guardada · ${D.formatearPeso(peso, unidad)} × ${reps}`, 1300);
+        const antes = await guardar();
+        if (!celebrarSiHayNuevas(antes, calculoPerfil())) {
+          aviso(`Serie guardada · ${D.formatearPeso(peso, unidad)} × ${reps}`, 1300);
+        }
         refrescar();
       };
       $('#ver-ficha', cuerpo).onclick = () => {
@@ -1090,7 +2074,7 @@ async function abrirFicha(maquinaId) {
     ${m.foto ? '<div id="ficha-foto" style="margin-bottom:12px"></div>' : ''}
     ${!m.foto && cat.rutaFoto(m.nombre)
       ? `<div class="ficha-sinfoto">
-           <span class="ficha-sinfoto-img"><img class="ej-foto" src="${cat.rutaFoto(m.nombre)}" alt="" loading="lazy"></span>
+           <span class="ficha-sinfoto-img"><img class="ej-foto" src="${cat.rutaFoto(m.nombre)}" alt="" width="76" height="76" loading="lazy"></span>
            <div class="ficha-sinfoto-texto">
              Foto de ejemplo. Si tu máquina es distinta, hazle una foto y la reconocerás de un vistazo.
            </div>
@@ -1099,7 +2083,11 @@ async function abrirFicha(maquinaId) {
 
     <div class="ficha" id="ej-tecnica">
       <h3 class="ficha-titulo">Cómo se hace</h3>
-      <div class="cargando">Buscando los pasos…</div>
+      <div class="esqueleto-lista" aria-label="Buscando los pasos" aria-busy="true">
+        <span class="esqueleto" style="width:92%"></span>
+        <span class="esqueleto" style="width:78%"></span>
+        <span class="esqueleto" style="width:85%"></span>
+      </div>
     </div>
 
     <div class="ficha">
@@ -1275,6 +2263,12 @@ async function abrirFicha(maquinaId) {
 /* ========================================================================== *
  * CREAR / EDITAR MÁQUINA
  * ========================================================================== */
+/** «banca» → «Press de banca». Sin levantamiento, «nada». */
+function nombreLevantamiento(id) {
+  const l = INS.LEVANTAMIENTO_POR_ID.get(id);
+  return l ? l.nombre : 'no cuenta para medallas';
+}
+
 function editarMaquina(maquinaId) {
   const m = maquinaId ? S.cache.maquinas.find((x) => x.id === maquinaId) : null;
   const gimnasios = S.cache.gimnasios;
@@ -1319,6 +2313,21 @@ function editarMaquina(maquinaId) {
         <input type="number" id="f-inc" step="any" placeholder="2.5" value="${m && m.incremento ? m.incremento : ''}">
       </div>
     </div>
+    <!-- QUÉ LEVANTAMIENTO ES, para las medallas.
+         Carlos, 31-ago-2026: «con algunas máquinas si cumples los requisitos no
+         lo detecta». La app lo adivina por el nombre y acierta casi siempre,
+         pero «casi» no vale cuando lo que está en juego es una medalla: aquí se
+         puede decir a mano, y lo dicho a mano gana. -->
+    <div class="campo">
+      <label for="f-lev">Cuenta como</label>
+      <select id="f-lev">
+        <option value="auto">Automático${m ? ` — ahora: ${esc(nombreLevantamiento(PF.levantamientoDe({ nombre: m.nombre })))}` : ''}</option>
+        <option value="">Ninguno · no cuenta para medallas</option>
+        ${INS.LEVANTAMIENTOS.map((l) => `<option value="${l.id}">${esc(l.nombre)}</option>`).join('')}
+      </select>
+      <p class="campo-nota">Solo sirve para las medallas de récord. Si tu press de banca
+        se llama de otra forma, dilo aquí y empezará a contar.</p>
+    </div>
     <div class="campo">
       <label>Foto de la máquina</label>
       <div id="previa" style="margin-bottom:8px"></div>
@@ -1328,6 +2337,12 @@ function editarMaquina(maquinaId) {
     <button class="boton" id="f-guardar">${m ? 'Guardar cambios' : 'Crear máquina'}</button>
     ${m ? '<div class="botonera"><button class="boton boton-peligro" id="f-borrar">Borrar máquina</button></div>' : ''}`,
     (cuerpo, cerrar) => {
+      // El `select` no se puede preseleccionar en el HTML porque hay que
+      // distinguir «no lo he dicho» (auto) de «he dicho que ninguno» (''), y en
+      // un atributo `selected` las dos cosas se escriben igual.
+      $('#f-lev', cuerpo).value =
+        m && m.levantamiento !== undefined && m.levantamiento !== null ? m.levantamiento : 'auto';
+
       let fotoBlob = m ? m.foto : null;
       const previa = $('#previa', cuerpo);
       const pintarPrevia = () => {
@@ -1367,6 +2382,11 @@ function editarMaquina(maquinaId) {
           foto: fotoBlob,
           notas: m ? m.notas || '' : '',
         };
+        const lev = $('#f-lev', cuerpo).value;
+        // «Automático» se guarda BORRANDO el campo, no poniéndolo a null: el
+        // campo ausente es lo que hace que la regla del nombre vuelva a mandar.
+        if (lev === 'auto') delete datos.levantamiento;
+        else datos.levantamiento = lev;
         await db.guardar('maquinas', datos);
         await recargar();
         cerrar();
@@ -1378,7 +2398,7 @@ function editarMaquina(maquinaId) {
       const bBorrar = $('#f-borrar', cuerpo);
       if (bBorrar)
         bBorrar.onclick = async () => {
-          if (!confirm(`¿Borrar "${m.nombre}" y su historial?`)) return;
+          if (!await preguntar(`¿Borrar "${m.nombre}" y su historial?`)) return;
           for (const s of seriesDe(m.id)) await db.borrar('series', s.id);
           await db.borrar('maquinas', m.id);
           await recargar();
@@ -1470,15 +2490,19 @@ function pintarProgreso(raiz) {
       <button class="chip" data-ambito="todos" aria-pressed="${ambito === 'todos'}">Todos</button>
     </div>
 
-    <h3 class="seccion-titulo">Evolución por máquina</h3>
-    <div class="campo"><select id="sel-maquina" aria-label="Máquina"></select></div>
-    <div class="ficha"><div id="g-maquina"></div></div>
+    <h2 class="seccion-titulo">Evolución por máquina</h2>
+    <button class="selector-linea" id="sel-maquina" aria-haspopup="dialog">
+      <span class="sel-nombre">—</span>
+      <span class="sel-pista">cambiar</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+    </button>
+    <div id="g-maquina"></div>
     <div class="analisis" id="metricas"></div>
 
-    <h3 class="seccion-titulo">Atención: estancadas</h3>
+    <h2 class="seccion-titulo">Atención: estancadas</h2>
     <div id="estancadas"></div>
 
-    <h3 class="seccion-titulo">De propina</h3>
+    <h2 class="seccion-titulo">De propina</h2>
     <div class="ficha">
       <div class="volumen-linea">
         <div>
@@ -1506,13 +2530,17 @@ function pintarProgreso(raiz) {
   const conDatos = maquinas
     .filter((m) => enRangoDe(m.id).length > 0)
     .sort((a, b) => enRangoDe(b.id).length - enRangoDe(a.id).length);
+  // El selector de máquina era un <select> nativo: en Android lo pinta el
+  // fabricante, así que ni respetaba el tema ni se parecía al resto de la app.
+  // Ahora es un botón que enseña la máquina y abre una hoja con buscador — que
+  // además hace falta, porque con 40 máquinas un desplegable no se navega.
   const sel = $('#sel-maquina', raiz);
-  sel.innerHTML = conDatos.length
-    ? conDatos.map((m) => `<option value="${m.id}" ${m.id === S.maquinaGrafica ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('')
-    : '<option>— sin datos en este periodo —</option>';
+  sel.disabled = !conDatos.length;
 
   const pintarMaquina = () => {
-    const m = conDatos.find((x) => x.id === sel.value) || conDatos[0];
+    const m = conDatos.find((x) => x.id === S.maquinaGrafica) || conDatos[0];
+    $('.sel-nombre', sel).textContent = m ? m.nombre : '— sin datos en este periodo —';
+    $('.sel-pista', sel).textContent = m ? `${enRangoDe(m.id).length} series · cambiar` : '';
     const caja = $('#g-maquina', raiz);
     const met = $('#metricas', raiz);
     if (!m) {
@@ -1529,7 +2557,7 @@ function pintarProgreso(raiz) {
         etiqueta: p.etiqueta,
         valor: p.mejorPesoUnidad,
         enCurso: p.enCurso,
-        extra: `${p.nSeries} serie(s) · mejor × ${p.repsMejor}`,
+        extra: `${p.nSeries} ${p.nSeries === 1 ? 'serie' : 'series'} · mejor × ${p.repsMejor}`,
       })),
       { unidad, titulo: m.nombre }
     );
@@ -1566,7 +2594,30 @@ function pintarProgreso(raiz) {
         <div class="metrica-pie">en ${evo.length} ${rango.periodo === 'dia' ? 'días' : rango.periodo === 'semana' ? 'semanas' : 'meses'}</div>
       </div>`;
   };
-  sel.onchange = pintarMaquina;
+  sel.onclick = () => {
+    if (!conDatos.length) return;
+    hoja('¿Qué máquina?', `
+      <input class="buscador" type="search" id="bm" placeholder="Buscar máquina…" autocomplete="off">
+      <div class="hoja-lista" id="lm"></div>`, (cuerpo, cerrar) => {
+      const lista = $('#lm', cuerpo);
+      const pintarLista = (q = '') => {
+        const filtro = quitarTildes(q.trim().toLowerCase());
+        const vistas = conDatos.filter((m) => !filtro || quitarTildes(m.nombre.toLowerCase()).includes(filtro));
+        lista.innerHTML = vistas.length
+          ? vistas.map((m) => `<button class="hoja-op" data-m="${m.id}" aria-current="${m.id === S.maquinaGrafica}">
+               <span>${esc(m.nombre)}<small>${enRangoDe(m.id).length} series en ${esc(rango.nombre.toLowerCase())}</small></span>
+               ${m.id === S.maquinaGrafica ? icono('tic', 20) : ''}</button>`).join('')
+          : '<p class="grafica-vacia">Ninguna con ese nombre.</p>';
+        $$('[data-m]', lista).forEach((b) => (b.onclick = () => {
+          S.maquinaGrafica = b.dataset.m;
+          cerrar();
+          pintarMaquina();
+        }));
+      };
+      pintarLista();
+      $('#bm', cuerpo).oninput = (e) => pintarLista(e.target.value);
+    });
+  };
   pintarMaquina();
 
   // --- estancadas ---
@@ -1575,24 +2626,24 @@ function pintarProgreso(raiz) {
   ce.innerHTML = est.length
     ? ''
     : '<p class="grafica-vacia">Nada estancado. O eso, o todavía faltan datos.</p>';
-  for (const e of est.slice(0, 8)) {
+  est.slice(0, 8).forEach((e, indice) => {
     const d = document.createElement('div');
-    d.className = 'ficha';
-    d.style.padding = '12px 14px';
-    d.innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-      <div><div style="font-weight:650">${esc(e.maquina.nombre)}</div>
-      <div style="font-size:.85rem;color:var(--texto-2)">Tu mejor peso sigue siendo ${D.formatearPeso(
-        e.mejorUnidad,
-        e.unidad
-      )} desde hace ${e.semanas} semanas</div></div>
-      <span class="badge badge-estancada">${e.semanas} sem.</span></div>`;
+    d.className = 'estancada';
+    d.style.setProperty('--i', indice);
+    d.innerHTML = `
+      <div class="estancada-txt">
+        <div class="estancada-nombre">${esc(e.maquina.nombre)}</div>
+        <div class="estancada-det">Sigues en <b>${D.formatearPeso(e.mejorUnidad, e.unidad)}</b>
+          desde hace ${e.semanas} semanas</div>
+      </div>
+      <span class="badge badge-estancada">${e.semanas} sem.</span>`;
     ce.appendChild(d);
-  }
+  });
 
   // --- volumen: anecdótico. Un número, y la gráfica solo si la pide ---------
   const vol = D.evolucionVolumen(series, mPorId, sesPorId, rango.periodo);
   const total = vol.reduce((n, v) => n + v.volumen, 0);
-  $('#vol-total', raiz).textContent = `${Math.round(total).toLocaleString('es-ES')} kg`;
+  contarHasta($('#vol-total', raiz), Math.round(total), { sufijo: ' kg' });
   const btnVol = $('#ver-volumen', raiz);
   btnVol.onclick = () => {
     const caja = $('#g-volumen', raiz);
@@ -1623,124 +2674,449 @@ function pintarProgreso(raiz) {
 /* ========================================================================== *
  * TEMAS DE COLOR
  * ========================================================================== *
- * Tres de fábrica y uno suyo. Las muestras que se ven en Ajustes llevan los
- * colores REALES del tema (no una aproximación bonita): así lo que se elige es
- * lo que se ve después.
+ * Tres de fábrica y todos los suyos.
+ *
+ * Carlos, 29-ago-2026: *«en el color personalizado, añade una opción de
+ * personalización más amplia y más controlable para el usuario con la opción de
+ * poder importa y exportar las diferentes personalizaciones»*.
+ *
+ * La aritmética de los temas vive en `temas.js` y se prueba con `node`. Aquí
+ * solo está lo que toca el DOCUMENTO: aplicar, guardar y el estudio.
+ *
+ * POR QUÉ LAS VARIABLES SE QUITAN UNA A UNA AL CAMBIAR DE TEMA:
+ * `style.cssText = ''` se llevaría por delante cualquier otro estilo en línea
+ * de la raíz. Y dejar puesta una sola variable del tema anterior es peor que
+ * no poner ninguna: el tema de fábrica saldría con el fondo de otro y nadie
+ * entendería por qué.
  */
+// Los colores de aquí son los MISMOS que los del CSS: la muestra de cada tema
+// tiene que enseñar el tema de verdad, y `fondo` es además lo que se le pasa a
+// Android para pintar su barra de estado.
 const TEMAS = [
-  { id: 'oscuro', nombre: 'Oscuro', fondo: '#0e1116', borde: '#2a313c', acento: '#3987e5', texto: '#f2f5f9' },
-  { id: 'claro', nombre: 'Claro', fondo: '#f4f6f9', borde: '#dde2e9', acento: '#2a78d6', texto: '#0f141b' },
-  { id: 'rosa', nombre: 'Rosa', fondo: '#14090f', borde: '#3f2434', acento: '#ff9ec7', texto: '#fdf1f7' },
-  { id: 'propio', nombre: 'El tuyo', fondo: '#171b22', borde: '#2a313c', acento: '#8b5cf6', texto: '#f2f5f9' },
+  { id: 'oscuro', nombre: 'Oscuro', fondo: '#0b0d11', borde: '#283039', acento: '#d2fa55', texto: '#f2f6fb' },
+  { id: 'claro', nombre: 'Claro', fondo: '#f2f4f8', borde: '#dbe1ea', acento: '#4d7a00', texto: '#0d1117' },
+  { id: 'rosa', nombre: 'Rosa', fondo: '#120810', borde: '#3f2434', acento: '#ff9ec7', texto: '#fdf1f7' },
 ];
 
-const PROPIO_POR_DEFECTO = { acento: '#8b5cf6', base: 'oscuro' };
-
+/** El tema propio que está puesto ahora. Lee también el formato viejo. */
 async function temaPropio() {
-  const g = await db.ajuste('tema_propio', null);
-  return { ...PROPIO_POR_DEFECTO, ...(g || {}) };
+  return TEM.normalizar((await db.ajuste('tema_propio', null)) || {});
 }
 
-/**
- * Luminancia relativa (WCAG). Se calcula, no se mira: elegir a ojo si un botón
- * necesita letra blanca o negra es exactamente cómo salen los botones
- * ilegibles. Con el rosa de JARVIS (#ff9ec7), el blanco da 1,9:1 — ilegible —
- * y la tinta oscura 12:1.
- */
-function luminancia(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-  if (!m) return 0;
-  const n = parseInt(m[1], 16);
-  const canal = (c) => {
-    const v = c / 255;
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * canal((n >> 16) & 255) + 0.7152 * canal((n >> 8) & 255) + 0.0722 * canal(n & 255);
+/** Los temas que Carlos ha guardado con nombre. */
+async function temasGuardados() {
+  const l = await db.ajuste('temas_propios', null);
+  return Array.isArray(l) ? l.map((t) => TEM.normalizar(t)) : [];
 }
 
-function rgbaDe(hex, alfa) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-  if (!m) return `rgba(57,135,229,${alfa})`;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alfa})`;
+async function guardarTemas(lista) {
+  await db.ponAjuste('temas_propios', lista.map((t) => TEM.normalizar(t)));
 }
+
+// Todo lo que un tema propio puede escribir en la raíz. Se guarda para poder
+// borrarlo entero después: si un día `variables()` devuelve una clave menos,
+// la de antes se quedaría pegada para siempre.
+let _varsPuestas = [];
 
 /**
  * Pone el tema en el documento. `propio` solo pinta cuando el tema es el suyo:
  * si no, un acento en línea se quedaría pegado al cambiar a «Claro» y el tema
  * de fábrica saldría con el color de otro.
  */
-function aplicarTema(id, propio) {
+let _finCruce = null;
+
+/**
+ * El cruce de colores al cambiar de tema.
+ *
+ * Se enciende SOLO al elegir un tema (un botón, un preset), nunca mientras se
+ * arrastra un mando: con la transición puesta, la vista previa iría siempre
+ * 260 ms por detrás del dedo y parecería que el mando no responde.
+ */
+function cruzarColores() {
   const raiz = document.documentElement;
+  raiz.classList.add('cruzando');
+  clearTimeout(_finCruce);
+  _finCruce = setTimeout(() => raiz.classList.remove('cruzando'), 320);
+}
+
+function aplicarTema(id, propio, { suave = false } = {}) {
+  const raiz = document.documentElement;
+  if (suave) cruzarColores();
   raiz.dataset.tema = id;
-  raiz.style.removeProperty('--acento');
-  raiz.style.removeProperty('--acento-tinta');
-  raiz.style.removeProperty('--acento-suave');
+  _varsPuestas.forEach((k) => raiz.style.removeProperty(k));
+  _varsPuestas = [];
+  raiz.style.removeProperty('font-size');
+
+  let colorBarra;
   if (id !== 'propio') {
     raiz.removeAttribute('data-base');
+    colorBarra = (TEMAS.find((x) => x.id === id) || TEMAS[0]).fondo;
   } else {
-    const p = { ...PROPIO_POR_DEFECTO, ...(propio || {}) };
-    raiz.dataset.base = p.base;
-    raiz.style.setProperty('--acento', p.acento);
-    raiz.style.setProperty('--acento-tinta', luminancia(p.acento) > 0.42 ? '#101418' : '#ffffff');
-    raiz.style.setProperty('--acento-suave', rgbaDe(p.acento, 0.16));
+    const t = TEM.normalizar(propio || {});
+    const vars = TEM.variables(t);
+    raiz.dataset.base = t.base;
+    Object.entries(vars).forEach(([k, v]) => raiz.style.setProperty(k, v));
+    _varsPuestas = Object.keys(vars);
+    // El tamaño de letra NO es una variable: es el `font-size` de la raíz, del
+    // que cuelgan todos los `rem` de la app. Cambiarlo aquí escala la app
+    // entera —espacios incluidos—, que es lo que se pide cuando se pide letra
+    // más grande. Escalar solo la letra deja los botones igual de pequeños.
+    raiz.style.setProperty('font-size', TEM.tamanoLetra(t));
+    colorBarra = vars['--fondo'];
   }
   // La barra del sistema en Android coge este color; sin actualizarlo, el móvil
   // sigue enseñando una franja del tema anterior encima de la app.
   const meta = document.querySelector('meta[name="theme-color"]');
-  const t = TEMAS.find((x) => x.id === id);
-  if (meta && t) {
-    meta.content = id === 'propio'
-      ? (propio && propio.base === 'claro' ? '#f4f6f9' : '#0e1116')
-      : t.fondo;
+  if (meta && colorBarra) meta.content = colorBarra;
+}
+
+/** Pone un tema propio, lo guarda y lo deja como el elegido. */
+async function ponerTemaPropio(tema) {
+  const t = TEM.normalizar(tema);
+  await db.ponAjuste('tema_propio', t);
+  await db.ponAjuste('tema', 'propio');
+  aplicarTema('propio', t, { suave: true });
+  return t;
+}
+
+/* --------------------------------------------------------------------------
+ * EL ESTUDIO DE TEMAS
+ * ------------------------------------------------------------------------ *
+ * Una hoja con vista previa VIVA: los mandos de arriba y, debajo, un trozo de
+ * app de verdad —una tarjeta, una cifra, un botón, la pestaña activa— pintado
+ * con el tema que se está tocando. Enseñar cuatro cuadraditos de color y
+ * llamarlo vista previa es lo que hace que uno elija un tema y luego descubra
+ * que los números no se leen.
+ *
+ * El tema se aplica AL DOCUMENTO mientras se arrastra el mando, no solo a la
+ * vista previa. Es la única forma de ver si el color va bien con la barra, con
+ * las sombras y con la foto de una máquina.
+ * ------------------------------------------------------------------------ */
+function estudioDeTemas(temaInicial, alSalir) {
+  // El tema de antes, para poder devolverlo si se cierra sin guardar. Sin esto,
+  // trastear con los mandos y arrepentirse deja la app de otro color.
+  const eraTema = document.documentElement.dataset.tema || 'oscuro';
+  let t = TEM.normalizar(temaInicial);
+  let guardado = false;
+
+  const mando = (id, etiqueta, min, max, valor, pista) => `
+    <div class="mando">
+      <label for="${id}">${esc(etiqueta)} <b id="${id}-v">${valor}</b></label>
+      <input type="range" id="${id}" min="${min}" max="${max}" value="${valor}" step="1">
+      <span class="mando-pista">${esc(pista)}</span>
+    </div>`;
+
+  const cerrar = hoja('Estudio de temas', `
+    <div class="estudio">
+      <div class="estudio-pegada">
+      <div class="estudio-previa" id="e-previa">
+        <div class="previa-barra"><span class="previa-punto"></span><b>GYM</b></div>
+        <div class="previa-ficha">
+          <span class="previa-eti">Press banca</span>
+          <div class="previa-cifra"><b>82,5</b><span>kg × 8</span></div>
+          <div class="previa-linea"><i style="width:72%"></i></div>
+          <div class="previa-pie">
+            <button class="previa-boton" type="button">Guardar serie</button>
+            <span class="previa-chip">Récord</span>
+          </div>
+        </div>
+        <div class="previa-nav">
+          <span class="previa-tab activa">Entrenar</span>
+          <span class="previa-tab">Progreso</span>
+          <span class="previa-tab">Plan</span>
+        </div>
+      </div>
+      </div>
+
+      <div class="estudio-mandos">
+        <div class="campo"><label for="e-nombre">Nombre del tema</label>
+          <input type="text" id="e-nombre" maxlength="40" value="${esc(t.nombre)}" placeholder="El mío"></div>
+
+        <div class="propio-fila">
+          <label for="e-acento">Tu color</label>
+          <input type="color" id="e-acento" value="${esc(t.acento)}">
+        </div>
+
+        <div class="chips" id="e-presets">
+          ${TEM.PRESETS.map((p) => `
+            <button class="chip chip-tema" data-preset="${esc(p.nombre)}"
+              style="--muestra:${esc(p.acento)}"><i></i>${esc(p.nombre)}</button>`).join('')}
+        </div>
+
+        <div class="chips">
+          <button class="chip" data-base="oscuro" aria-pressed="${t.base === 'oscuro'}">Sobre oscuro</button>
+          <button class="chip" data-base="claro" aria-pressed="${t.base === 'claro'}">Sobre claro</button>
+        </div>
+
+        ${mando('e-intensidad', 'Fondo', 0, 100, t.intensidad, '')}
+        ${mando('e-radio', 'Esquinas', 60, 140, t.radio, 'De cuadrado a muy redondo')}
+        ${mando('e-escala', 'Tamaño de la letra', 90, 115, t.escala, 'Escala la app entera, no solo el texto')}
+
+        <p class="estudio-avisos" id="e-avisos"></p>
+        <p class="nut-media">Los colores de las <b>gráficas</b> no cambian: están elegidos
+          para que se distingan también con daltonismo y con el móvil al sol.</p>
+      </div>
+
+      <div class="botonera">
+        <button class="boton boton-2" id="e-copiar">Copiar código</button>
+        <button class="boton boton-2" id="e-pegar">Pegar código</button>
+      </div>
+      <div class="botonera">
+        <button class="boton boton-2" id="e-fichero">Exportar a fichero</button>
+        <button class="boton boton-2" id="e-importar">Importar fichero</button>
+        <input type="file" id="e-fich" accept="application/json,.json" hidden>
+      </div>
+      <div class="botonera">
+        <button class="boton" id="e-guardar">Guardar y usar</button>
+      </div>
+    </div>`, (cuerpo, cerrarHoja) => {
+
+    const previa = $('#e-previa', cuerpo);
+    const refrescar = () => {
+      const vars = TEM.variables(t);
+      // A la vista previa se le ponen las variables encima: así enseña el tema
+      // que se está tocando aunque el documento tarde un frame en pintarlo.
+      Object.entries(vars).forEach(([k, v]) => previa.style.setProperty(k, v));
+      aplicarTema('propio', t);
+      const fuera = TEM.avisos(t);
+      const zona = $('#e-avisos', cuerpo);
+      zona.innerHTML = fuera.length
+        ? fuera.map((a) => `<span class="aviso-tema">${esc(a)}</span>`).join('')
+        : '<span class="aviso-tema ok">Se lee bien: contraste comprobado.</span>';
+      $$('[data-base]', cuerpo).forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.base === t.base)));
+      // La pista del fondo depende de la base: en claro no se va «a casi
+      // negro», se va a casi blanco. Una pista que miente estorba más que
+      // ninguna.
+      $('#e-intensidad ~ .mando-pista', cuerpo).textContent = t.base === 'oscuro'
+        ? 'De gris carbón a casi negro'
+        : 'De blanco puro a gris papel';
+    };
+
+    const cambiar = (parte, suave = false) => {
+      t = TEM.normalizar({ ...t, ...parte });
+      if (suave) cruzarColores();
+      refrescar();
+    };
+
+    $('#e-acento', cuerpo).oninput = (e) => cambiar({ acento: e.target.value });
+    $('#e-nombre', cuerpo).oninput = (e) => { t.nombre = e.target.value.slice(0, 40); };
+    $$('[data-base]', cuerpo).forEach((b) => (b.onclick = () => { tocar(); cambiar({ base: b.dataset.base }, true); }));
+    $$('[data-preset]', cuerpo).forEach((b) => (b.onclick = () => {
+      const p = TEM.PRESETS.find((x) => x.nombre === b.dataset.preset);
+      if (!p) return;
+      tocar();
+      // Un preset trae color, base y fondo; las esquinas y la letra son de
+      // Carlos y no se le tocan por elegir otro color.
+      cambiar({ ...p, nombre: p.nombre, radio: t.radio, escala: t.escala }, true);
+      $('#e-acento', cuerpo).value = t.acento;
+      $('#e-nombre', cuerpo).value = t.nombre;
+    }));
+
+    [['e-intensidad', 'intensidad'], ['e-radio', 'radio'], ['e-escala', 'escala']].forEach(([id, clave]) => {
+      const m = $(`#${id}`, cuerpo);
+      m.oninput = () => {
+        $(`#${id}-v`, cuerpo).textContent = m.value;
+        cambiar({ [clave]: Number(m.value) });
+      };
+    });
+
+    $('#e-copiar', cuerpo).onclick = async () => {
+      const codigo = TEM.aCodigo(t);
+      try {
+        await navigator.clipboard.writeText(codigo);
+        aviso('Código copiado: pégalo donde quieras');
+      } catch {
+        // Sin permiso de portapapeles el código no se pierde: se enseña para
+        // poder copiarlo a mano. Un «no he podido» a secas sería inútil.
+        prompt('Copia este código:', codigo);
+      }
+    };
+
+    $('#e-pegar', cuerpo).onclick = async () => {
+      let texto = '';
+      try { texto = await navigator.clipboard.readText(); } catch { /* pedimos a mano */ }
+      if (!texto) texto = prompt('Pega aquí el código del tema:') || '';
+      if (!texto.trim()) return;
+      try {
+        const [primero] = TEM.deCodigo(texto);
+        t = primero;
+        $('#e-acento', cuerpo).value = t.acento;
+        $('#e-nombre', cuerpo).value = t.nombre;
+        $('#e-intensidad', cuerpo).value = t.intensidad;
+        $('#e-intensidad-v', cuerpo).textContent = t.intensidad;
+        $('#e-radio', cuerpo).value = t.radio;
+        $('#e-radio-v', cuerpo).textContent = t.radio;
+        $('#e-escala', cuerpo).value = t.escala;
+        $('#e-escala-v', cuerpo).textContent = t.escala;
+        refrescar();
+        aviso(`Tema «${t.nombre}» cargado`);
+      } catch (e) {
+        aviso(`No pude leerlo: ${e.message}`, 3200);
+      }
+    };
+
+    $('#e-fichero', cuerpo).onclick = async () => {
+      const todos = await temasGuardados();
+      const juntos = [t, ...todos.filter((x) => x.nombre !== t.nombre)];
+      const blob = new Blob([TEM.aFichero(juntos)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `temas-gym-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      aviso(`Exportados ${juntos.length} temas`);
+    };
+
+    const fich = $('#e-fich', cuerpo);
+    $('#e-importar', cuerpo).onclick = () => fich.click();
+    fich.onchange = async () => {
+      const f = fich.files && fich.files[0];
+      if (!f) return;
+      try {
+        const temas = TEM.deCodigo(await f.text());
+        const antes = await temasGuardados();
+        // Se fusiona por nombre: importar dos veces el mismo fichero no deja
+        // ocho copias de «Fuego» en la lista.
+        const mapa = new Map(antes.map((x) => [x.nombre, x]));
+        temas.forEach((x) => mapa.set(x.nombre, x));
+        await guardarTemas([...mapa.values()]);
+        t = temas[0];
+        aviso(`Importados ${temas.length} temas`);
+        guardado = true;
+        await ponerTemaPropio(t);
+        cerrarHoja();
+        if (alSalir) alSalir();
+      } catch (e) {
+        aviso(`Ese fichero no vale: ${e.message}`, 3200);
+      }
+      fich.value = '';
+    };
+
+    $('#e-guardar', cuerpo).onclick = async () => {
+      t.nombre = ($('#e-nombre', cuerpo).value || '').trim() || 'El mío';
+      const lista = await temasGuardados();
+      const i = lista.findIndex((x) => x.nombre === t.nombre);
+      if (i >= 0) lista[i] = t; else lista.push(t);
+      await guardarTemas(lista);
+      await ponerTemaPropio(t);
+      guardado = true;
+      tocar(14);
+      aviso(`Tema «${t.nombre}» guardado`);
+      cerrarHoja();
+      if (alSalir) alSalir();
+    };
+
+    refrescar();
+  });
+
+  // Cerrar sin guardar devuelve la app a como estaba. El navegador no avisa de
+  // que una hoja se ha cerrado, así que se vigila con un observador del nodo.
+  // La ÚLTIMA, no la primera: `querySelector` devolvería una hoja anterior si
+  // hubiera dos abiertas, y entonces el observador vigilaría la que no es.
+  const fondos = document.querySelectorAll('.hoja-fondo');
+  const fondo = fondos[fondos.length - 1];
+  if (fondo) {
+    const obs = new MutationObserver(() => {
+      if (document.body.contains(fondo)) return;
+      obs.disconnect();
+      if (!guardado) {
+        aplicarTema(eraTema, eraTema === 'propio' ? temaInicial : null, { suave: true });
+        if (alSalir) alSalir();
+      }
+    });
+    obs.observe(document.body, { childList: true });
   }
+  return cerrar;
 }
 
 /* ========================================================================== *
  * VISTA: GIMNASIOS
  * ========================================================================== */
 function pintarGimnasios(raiz) {
-  raiz.innerHTML = `<div class="lista" id="lista-gyms"></div>
-    <div class="botonera"><button class="boton" id="nuevo-gym">+ Añadir gimnasio</button></div>`;
+  // BUSCAR GIMNASIOS DE LA APP.  Faltaba entero: solo se podía buscar uno
+  // público durante la bienvenida, y quien ya la hubiera pasado no tenía forma
+  // de encontrar el suyo nunca más. Y es lo que pidió Carlos: poder mirar la
+  // gente, las máquinas y las rutinas de un gimnasio ANTES de apuntarse.
+  raiz.innerHTML = `
+    <div class="botonera" style="margin-bottom:var(--e3)">
+      <button class="boton boton-2" id="gym-buscar-pub">${icono('lupa')} Buscar gimnasios</button>
+    </div>
+    <div class="lista" id="lista-gyms"></div>`;
   const cont = $('#lista-gyms', raiz);
+  $('#gym-buscar-pub', raiz).onclick = () => buscarGimnasiosPublicos();
   if (!S.cache.gimnasios.length) cont.innerHTML = '<div class="vacio"><p>Sin gimnasios todavía.</p></div>';
 
-  for (const g of S.cache.gimnasios) {
+  S.cache.gimnasios.forEach((g, indice) => {
     const nMaq = S.cache.maquinas.filter((m) => m.gimnasioId === g.id).length;
     const nSer = S.cache.series.filter((s) => s.gimnasioId === g.id).length;
+    const aqui = g.id === S.gimnasioId;
     const d = document.createElement('div');
-    d.className = 'ficha';
+    d.className = `sitio ${aqui ? 'sitio-aqui' : ''}`;
+    d.style.setProperty('--i', indice);
     d.innerHTML = `
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
-        <div style="min-width:0">
-          <div style="font-weight:700;font-size:1.05rem">${esc(g.nombre)}</div>
-          <div style="font-size:.86rem;color:var(--texto-2)">${esc(g.direccion || '')}</div>
-          <div style="font-size:.82rem;color:var(--texto-tenue);margin-top:4px">${nMaq} máquinas · ${nSer} series</div>
-        </div>
-        <button class="boton-plano" data-editar-gym="${g.id}">Editar</button>
+      <button class="sitio-cuerpo" data-ir-gym="${g.id}">
+        <span class="sitio-nombre">${esc(g.nombre)}</span>
+        ${g.direccion ? `<span class="sitio-donde">${esc(g.direccion)}</span>` : ''}
+        <span class="sitio-cifras">
+          <span class="sitio-cifra"><b>${nMaq}</b> ${nMaq === 1 ? 'máquina' : 'máquinas'}</span>
+          <span class="sitio-cifra"><b>${nSer.toLocaleString('es-ES')}</b> ${nSer === 1 ? 'serie' : 'series'}</span>
+          ${aqui ? '<span class="badge badge-hecho">estás aquí</span>' : ''}
+        </span>
+      </button>
+      <div class="sitio-botones">
+        <button class="nut-editar" data-compartir-gym="${g.id}" ${nMaq ? '' : 'disabled'}
+                aria-label="Compartir las máquinas de ${esc(g.nombre)}">${icono('enviar', 20)}</button>
+        <button class="nut-editar" data-gente-gym="${g.id}"
+                aria-label="Ver quién entrena en ${esc(g.nombre)}">${icono('gente', 20)}</button>
+        <button class="nut-editar" data-editar-gym="${g.id}" aria-label="Editar ${esc(g.nombre)}">${icono('lapiz', 20)}</button>
       </div>`;
     cont.appendChild(d);
-  }
+  });
+  // Tocar la tarjeta cambia de gimnasio: es lo que se quiere hacer al llegar a
+  // uno, y antes había que subir a la cabecera a buscarlo en el desplegable.
+  $$('[data-ir-gym]', raiz).forEach((b) => (b.onclick = async () => {
+    S.gimnasioId = b.dataset.irGym;
+    await db.ponAjuste('ultimo_gym', S.gimnasioId);
+    irA('entrenar');
+  }));
   $$('[data-editar-gym]', raiz).forEach((b) => (b.onclick = () => editarGimnasio(b.dataset.editarGym)));
-  $('#nuevo-gym', raiz).onclick = () => editarGimnasio(null);
+  // «El gym Manolo con las máquinas que ya ha añadido el chico»: es literalmente
+  // el ejemplo que puso Carlos, y el sitio donde uno lo busca es la ficha del
+  // gimnasio, no un menú aparte.
+  $$('[data-compartir-gym]', raiz).forEach((b) => (b.onclick = () => compartirGimnasio(b.dataset.compartirGym)));
+  // «Ver al resto de miembros, sus records en las máquinas del gym,
+  // clasificaciones» (Carlos, 31-ago-2026). Se llega desde la ficha del
+  // gimnasio, que es donde uno lo busca.
+  $$('[data-gente-gym]', raiz).forEach((b) => (b.onclick = () =>
+    abrirGimnasioSocial(S.cache.gimnasios.find((x) => x.id === b.dataset.genteGym))));
 }
 
-function editarGimnasio(gimnasioId) {
+function editarGimnasio(gimnasioId, dePartida = {}) {
   const g = gimnasioId ? S.cache.gimnasios.find((x) => x.id === gimnasioId) : null;
+  // `dePartida` es lo que ya se había escrito en otra pantalla (el buscador de
+  // gimnasios de la app). Volver a teclear el nombre que acabas de escribir es
+  // justo la clase de cosa que hace que una app parezca que no te escucha.
   hoja(
     g ? 'Editar gimnasio' : 'Nuevo gimnasio',
     `
     <div class="campo"><label for="g-nombre">Nombre</label>
-      <input type="text" id="g-nombre" placeholder="Ej.: VivaGym Reus" value="${esc(g ? g.nombre : '')}"></div>
+      <input type="text" id="g-nombre" placeholder="Ej.: VivaGym Reus" value="${
+        esc(g ? g.nombre : (dePartida.nombre || ''))}"></div>
     <div class="campo"><label for="g-dir">Dirección</label>
-      <input type="text" id="g-dir" placeholder="Calle, ciudad" value="${esc(g ? g.direccion || '' : '')}"></div>
-    <button class="boton boton-2" id="g-buscar" type="button">${icono('lupa')} Buscar en el mapa</button>
-    <p style="font-size:.8rem;color:var(--texto-tenue);margin:6px 2px 0">
-      Truco: si añades el código postal, lo clava. Sin él puede proponerte una
-      calle del mismo nombre en otro pueblo — por eso te enseña la dirección
-      entera y el mapa, para que confirmes tú.</p>
+      <input type="text" id="g-dir" placeholder="Calle, número, ciudad" value="${
+        esc(g ? g.direccion || '' : (dePartida.direccion || ''))}"></div>
+    <!-- El orden importa: lo que sale al escribir va PEGADO a lo que escribes,
+         y el mapa justo debajo. Antes entre la caja y sus resultados había un
+         botón y un párrafo de cinco líneas, así que las coincidencias
+         aparecían fuera de la pantalla y parecía que no salía nada. -->
     <div id="g-resultados" style="margin-top:8px"></div>
     <div id="g-mapa" style="margin-top:8px"></div>
+    <p style="font-size:.8rem;color:var(--texto-tenue);margin:8px 2px 0">
+      Vale el nombre («El Corte Inglés Diagonal») o la calle; con el código
+      postal lo clava. Lo que dejes en el centro del mapa es lo que se guarda.</p>
+    <button class="boton boton-2" id="g-buscar" type="button"
+            style="margin-top:8px">${icono('lupa')} Buscar más a fondo</button>
     <button class="boton" id="g-guardar" style="margin-top:12px">${g ? 'Guardar' : 'Crear'}</button>
     ${g ? '<div class="botonera"><button class="boton boton-peligro" id="g-borrar">Borrar gimnasio</button></div>' : ''}`,
     (cuerpo, cerrar) => {
@@ -1748,8 +3124,91 @@ function editarGimnasio(gimnasioId) {
       let elegido = (g && Number.isFinite(g.lat)) ? { lat: g.lat, lon: g.lon } : null;
       const cajaMapa = $('#g-mapa', cuerpo);
       const cajaRes = $('#g-resultados', cuerpo);
-      if (elegido) geo.pintarMapa(cajaMapa, elegido.lat, elegido.lon);
+      // Arrastrar el mapa CAMBIA lo que se guarda. Es lo que hace que sirva de
+      // algo: si el buscador te deja en la acera de enfrente, lo corriges tú.
+      // `centro` es solo POR DÓNDE SE ABRE el mapa cuando aún no hay
+      // coordenadas: el último gimnasio con dirección conocida, que casi
+      // siempre está en la misma ciudad. No es un dato del gimnasio nuevo y no
+      // se guarda: `alMover` solo salta cuando se fija el sitio de verdad.
+      const cerca = S.cache.gimnasios.find((x) => Number.isFinite(x.lat)
+        && Number.isFinite(x.lon) && !(Math.abs(x.lat) < 0.01 && Math.abs(x.lon) < 0.01));
+      // Lo que se vuelve a preguntar en cuanto se sabe dónde estás. Se rellena
+      // más abajo (necesita las cajas y el reloj) y se declara AQUÍ, antes de
+      // `verMapa`, porque un `let` leído antes de su línea revienta con un
+      // ReferenceError en vez de valer `undefined`.
+      let repetirBusqueda = null;
+      const verMapa = (la, lo) => geo.pintarMapa(cajaMapa, la, lo, {
+        centro: cerca ? { lat: cerca.lat, lon: cerca.lon } : null,
+        alMover: (nLa, nLo) => {
+          elegido = { lat: nLa, lon: nLo };
+          /* Y AHORA YA SABEMOS DESDE DÓNDE BUSCAR.  (3-sep-2026)
+           *
+           * La captura de Carlos: el mapa ya centrado en su calle de Reus —con
+           * un gimnasio VISIBLE en el propio mapa— y encima el mensaje «No
+           * encuentro ese sitio», que era el de la búsqueda de ANTES, cuando el
+           * móvil todavía no sabía dónde estaba. La respuesta se quedaba
+           * congelada en pantalla contradiciendo al mapa de debajo.
+           *
+           * El setup ya repetía la búsqueda al llegar la ubicación (0.24.0);
+           * esta hoja, no. Mismas palabras, otro orden, y ahora con Overpass —
+           * que sin un punto de partida no se puede ni preguntar. */
+          if (repetirBusqueda) repetirBusqueda();
+        },
+      });
+      // EL MAPA SALE DESDE EL PRINCIPIO, aunque no haya coordenadas. Antes este
+      // hueco estaba vacío hasta que una búsqueda saliera bien, y si el
+      // buscador no encontraba la calle no había NINGUNA forma de poner el
+      // gimnasio en el sitio. Ahora sale el botón de «usar mi ubicación», que
+      // es la salida honrada: estás dentro del gimnasio cuando lo das de alta.
+      verMapa(elegido ? elegido.lat : NaN, elegido ? elegido.lon : NaN);
 
+      /** Pinta una lista de sitios del mapa. Devuelve cuántos ha pintado. */
+      const pintarSitios = (res) => {
+        cajaRes.innerHTML = '';
+        const lista = document.createElement('div');
+        lista.className = 'lista-elegible';
+        for (const r of res) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          // `fila-elegible` y no `sitio`: `sitio` es la TARJETA de un gimnasio
+          // tuyo (rejilla con cifras) y aquí dejaba el nombre en una columna
+          // estrecha partido en tres líneas. Esto es una fila de elegir, que es
+          // lo que ya usan las demás listas de la app.
+          b.className = 'pf-elegible fila-elegible';
+          // Se enseña la dirección COMPLETA a propósito: es la única forma de
+          // que Carlos detecte que el sitio propuesto es del pueblo de al lado.
+          // Un sitio que está a 200 m y una calle que existe en algún sitio no
+          // son lo mismo, y quien elige tiene que poder distinguirlos.
+          const cerca = r.deCerca && Number.isFinite(r.metros)
+            ? `<span class="chip-cerca">${r.metros < 1000
+                ? `a ${r.metros} m` : `a ${(r.metros / 1000).toFixed(1)} km`}</span>`
+            : '';
+          b.innerHTML = `<span class="fila-elegible-t">${esc(r.titulo)}${cerca}</span>`
+            + `<span class="fila-elegible-s">${esc(r.completa || r.direccion)}</span>`;
+          b.onclick = () => {
+            elegido = { lat: r.lat, lon: r.lon };
+            $('#g-dir', cuerpo).value = r.completa || r.direccion;
+            $$('.fila-elegible', cajaRes).forEach((x) => x.setAttribute('aria-pressed', x === b));
+            verMapa(r.lat, r.lon);
+          };
+          lista.appendChild(b);
+        }
+        cajaRes.appendChild(lista);
+        return res.length;
+      };
+
+      /** Qué decir cuando no sale nada, que no es siempre lo mismo. */
+      const nadaQueEnsenar = () => {
+        const fallo = geo.ultimoFallo();
+        cajaRes.innerHTML = `<p class="mapa-vacio">${esc(fallo
+          ? `${fallo}. Escribe la dirección a mano y coloca el mapa con «usar mi ubicación»: `
+            + 'el gimnasio se guarda igual.'
+          : 'No encuentro ese sitio. Prueba con la calle y el código postal, o pon el '
+            + 'mapa donde estás y arrástralo hasta la puerta.')}</p>`;
+      };
+
+      // BUSCAR A FONDO (el botón): la cascada entera, que prueba de lo concreto
+      // a lo general. Tarda más y por eso no se dispara sola al teclear.
       $('#g-buscar', cuerpo).onclick = async () => {
         const nombre = $('#g-nombre', cuerpo).value.trim();
         const dir = $('#g-dir', cuerpo).value.trim();
@@ -1757,31 +3216,80 @@ function editarGimnasio(gimnasioId) {
 
         cajaRes.innerHTML = '<p class="mapa-vacio">Buscando…</p>';
         const res = await geo.buscarGimnasio(nombre, dir);
-        if (!res.length) {
-          cajaRes.innerHTML =
-            '<p class="mapa-vacio">No encontré esa dirección (o no hay cobertura ahora). ' +
-            'Puedes escribirla a mano igualmente.</p>';
-          return;
-        }
-        cajaRes.innerHTML = '';
-        for (const r of res) {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'sitio';
-          // Se enseña la dirección COMPLETA a propósito: es la única forma de
-          // que Carlos detecte que el sitio propuesto es del pueblo de al lado.
-          b.innerHTML = `<b>${esc(r.titulo)}</b><span>${esc(r.completa)}</span>`;
-          b.onclick = () => {
-            elegido = { lat: r.lat, lon: r.lon };
-            $('#g-dir', cuerpo).value = r.direccion;
-            $$('.sitio', cajaRes).forEach((x) => x.setAttribute('aria-pressed', x === b));
-            geo.pintarMapa(cajaMapa, r.lat, r.lon);
-          };
-          cajaRes.appendChild(b);
-        }
+        if (!pintarSitios(res)) return nadaQueEnsenar();
         // Si solo hay uno, se elige solo: un toque menos.
-        if (res.length === 1) cajaRes.firstChild.click();
+        if (res.length === 1) $('.fila-elegible', cajaRes).click();
       };
+
+      /* --------------------------------------------------------------------
+       * SUGERENCIAS AL ESCRIBIR, COMO UN MAPA DE VERDAD  (1-sep-2026)
+       *
+       * Carlos: *«que tú no puedas poner la dirección manualmente y veas que te
+       * vayan saliendo diferentes opciones no tiene sentido»*. Lo que había
+       * disparaba la CASCADA completa (hasta cinco búsquedas con 1,1 s de
+       * espera entre ellas) y solo desde la caja de la dirección, y con cinco
+       * letras mínimo. Desde una caja de texto eso es una pantalla quieta
+       * durante ocho segundos: parece que no hace nada.
+       *
+       * Ahora es un solo tiro de texto libre con lo que haya escrito en las DOS
+       * cajas —el nombre también: «El Corte Inglés Diagonal» es un sitio, no
+       * una calle— y se aborta la anterior en cuanto llega otra tecla.
+       * ------------------------------------------------------------------ */
+      let relojDir = null;
+      /**
+       * QUÉ SE BUSCA: LO QUE ESTÁS ESCRIBIENDO, NO LAS DOS CAJAS PEGADAS.
+       *
+       * (2-sep-2026) Esto juntaba nombre y dirección con un espacio. En la
+       * captura de Carlos eso era «Viva gym reus Viva gym», que no es un sitio
+       * de ningún mapa del mundo, y por eso salía «no encuentro ese sitio»
+       * mientras las dos cajas por separado sí tenían sentido. Ahora se busca
+       * la caja en la que se está escribiendo, como en cualquier buscador de
+       * mapas, y si esa está vacía se prueba la otra.
+       */
+      const sugerirAhora = (cual) => {
+        const nom = $('#g-nombre', cuerpo).value.trim();
+        const dir = $('#g-dir', cuerpo).value.trim();
+        const texto = cual === 'nombre' ? (nom || dir)
+          : cual === 'dir' ? (dir || nom)
+            : (dir || nom);
+        if (texto.length < 3) { cajaRes.innerHTML = ''; return; }
+        clearTimeout(relojDir);
+        // 400 ms: lo justo para no disparar en cada tecla. La política de
+        // Nominatim pide un tiro por segundo y esto es UNO por pausa, no la
+        // cascada de cinco que había antes.
+        relojDir = setTimeout(async () => {
+          cajaRes.innerHTML = '<p class="mapa-vacio">Buscando…</p>';
+          const res = await geo.sugerir(texto, 6);
+          if (!res.length) return nadaQueEnsenar();
+          pintarSitios(res);
+        }, 400);
+      };
+      $('#g-dir', cuerpo).oninput = () => sugerirAhora('dir');
+      $('#g-nombre', cuerpo).oninput = () => sugerirAhora('nombre');
+      // Se busca la caja que tenga algo escrito, igual que al teclear.
+      repetirBusqueda = () => {
+        const nom = $('#g-nombre', cuerpo).value.trim();
+        const dir = $('#g-dir', cuerpo).value.trim();
+        if ((nom + dir).length < 3) return;
+        sugerirAhora(dir.length >= 3 ? 'dir' : 'nombre');
+      };
+      // Si se llega aquí con el nombre ya escrito (desde el buscador de
+      // gimnasios de la app), se busca solo: lo que quiere quien acaba de
+      // escribirlo es ver dónde está, no volver a tocar la caja.
+      if (!g && (dePartida.nombre || dePartida.direccion)) sugerirAhora();
+
+      /* Y SE PREGUNTA DÓNDE ESTÁS NADA MÁS ABRIR.  (0.30.0)
+       *
+       * Sin esto, la primera búsqueda sale a ciegas siempre: escribir en una
+       * caja no es pulsar el botón de la ubicación ni arrastrar el mapa, que
+       * eran las dos únicas formas de que la app supiera desde dónde preguntar.
+       * No bloquea nada y no mueve el mapa —mover el mapa es elegir un sitio y
+       * eso lo decide Carlos—; solo deja puesto el punto de partida y repite lo
+       * que ya se hubiera preguntado. */
+      geo.situarme().then((sabido) => {
+        if (sabido && cuerpo.isConnected) repetirBusqueda();
+      });
+
 
       $('#g-guardar', cuerpo).onclick = async () => {
         const nombre = $('#g-nombre', cuerpo).value.trim();
@@ -1807,7 +3315,7 @@ function editarGimnasio(gimnasioId) {
       if (bb)
         bb.onclick = async () => {
           const nMaq = S.cache.maquinas.filter((m) => m.gimnasioId === g.id).length;
-          if (!confirm(`¿Borrar "${g.nombre}" con sus ${nMaq} máquinas y su historial?`)) return;
+          if (!await preguntar(`¿Borrar "${g.nombre}" con sus ${nMaq} máquinas y su historial?`)) return;
           for (const m of S.cache.maquinas.filter((x) => x.gimnasioId === g.id)) {
             for (const s of seriesDe(m.id)) await db.borrar('series', s.id);
             await db.borrar('maquinas', m.id);
@@ -1858,22 +3366,48 @@ function anilloKcal(consumido, objetivo) {
   const pct = objetivo > 0 ? consumido / objetivo : 0;
   const dentro = Math.min(pct, 1);
   const pasado = Math.max(0, Math.min(pct - 1, 1));
+  // El aro se pinta VACÍO y se llena en cuanto está en pantalla: el dato es
+  // «cuánto llevas de lo tuyo», y verlo llegar cuenta esa historia. Aparecer ya
+  // hecho no cuenta nada. El relleno lo hace una transición de CSS sobre
+  // `stroke-dashoffset`, que no obliga a recalcular la página en cada cuadro.
   return `
     <div class="anillo ${pct > 1 ? 'anillo-pasado' : ''}">
       <svg viewBox="0 0 128 128" aria-hidden="true">
         <circle class="anillo-carril" cx="64" cy="64" r="${R}" />
         <circle class="anillo-relleno" cx="64" cy="64" r="${R}"
-          stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - dentro)).toFixed(1)}" />
+          stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}"
+          data-hasta="${(C * (1 - dentro)).toFixed(1)}" />
         ${pasado > 0
           ? `<circle class="anillo-exceso" cx="64" cy="64" r="${R}"
-               stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - pasado)).toFixed(1)}" />`
+               stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}"
+               data-hasta="${(C * (1 - pasado)).toFixed(1)}" />`
           : ''}
       </svg>
       <div class="anillo-centro">
-        <span class="nut-kcal">${consumido.toLocaleString('es-ES')}</span>
+        <span class="nut-kcal" data-contar="${consumido}">0</span>
         <span class="nut-kcal-obj">de ${objetivo.toLocaleString('es-ES')} kcal</span>
       </div>
     </div>`;
+}
+
+/**
+ * Arranca lo que tiene que moverse al pintar una pantalla: los aros se llenan y
+ * las cifras de titular suben contando.
+ *
+ * Va en un `requestAnimationFrame` porque si se cambia el valor en el mismo
+ * fotograma en que se inserta el elemento, el navegador no ve ningún cambio que
+ * animar: pinta directamente el estado final. Es el fallo clásico de las
+ * transiciones que «no funcionan».
+ */
+function animarEntrada(raiz = document) {
+  requestAnimationFrame(() => {
+    raiz.querySelectorAll('[data-hasta]').forEach((c) => {
+      c.style.strokeDashoffset = c.dataset.hasta;
+    });
+    raiz.querySelectorAll('[data-contar]').forEach((el) => {
+      contarHasta(el, Number(el.dataset.contar) || 0);
+    });
+  });
 }
 
 function barraMacro(etiqueta, consumido, objetivo, unidad, clase) {
@@ -2540,13 +4074,13 @@ async function abrirEscaner(alTenerCodigo) {
             : 'No he podido preguntarlo.';
           cerrar();
           // Y aquí está el otro camino: si el código no lo resuelve, la foto sí.
-          if (confirm(`${motivo}\n\n¿Le hacemos una foto a la etiqueta?`)) abrirEtiqueta(alTenerCodigo, c);
+          if (await preguntar(`${motivo}\n\n¿Le hacemos una foto a la etiqueta?`)) abrirEtiqueta(alTenerCodigo, c);
           return;
         }
         const ficha = fichaDeProducto(r.producto);
         if (!ficha) {
           cerrar();
-          if (confirm('Ese producto está pero SIN tabla nutricional.\n\n¿Le hacemos una foto a la etiqueta?')) {
+          if (await preguntar('Ese producto está pero SIN tabla nutricional.\n\n¿Le hacemos una foto a la etiqueta?')) {
             abrirEtiqueta(alTenerCodigo, c);
           }
           return;
@@ -4373,13 +5907,42 @@ async function pintarAjustes(raiz) {
   const pend = await sync.pendientes();
   const tema = document.documentElement.dataset.tema || 'oscuro';
   const propio = await temaPropio();
+  const mios = await temasGuardados();
+  // La muestra de un tema propio se calcula con el MISMO motor que lo pinta:
+  // así el cuadradito de la lista es el tema de verdad y no una aproximación.
+  const muestraDe = (t) => {
+    const v = TEM.variables(t);
+    return { fondo: v['--fondo'], borde: v['--borde'], acento: v['--acento'], texto: v['--texto'] };
+  };
 
+  // EL APARTADO DEL PC YA NO SALE DE FÁBRICA.  (1-sep-2026)
+  //
+  // Carlos: *«cuando entras a la app sigues viendo lo de JARVIS; me gustaría
+  // que quitases todas esas referencias a ese proyecto, porque no tiene sentido
+  // si vamos a publicar la app. Déjalo para mí, para uso personal, para poder
+  // configurar mis datos»*.
+  //
+  // Tenía dos razones y las dos son buenas: el nombre de otro proyecto suyo no
+  // pinta nada en Google Play, y un apartado que pide «la dirección del PC» y
+  // barre la red local es, para cualquiera que no sea él, una pantalla rota que
+  // además pide permisos raros.
+  //
+  // POR QUÉ NO ES UNA RAMA APARTE, que es lo que pidió. Una rama con una
+  // pantalla de más se separa de la buena en cuanto se toque otra cosa, y
+  // acabaríamos manteniendo dos apps y compilando dos APK — y ya hubo un
+  // 30-ago-2026 en el que se construyó una versión entera sobre la rama
+  // equivocada. Es la MISMA app con un interruptor: siete toques en la línea de
+  // la versión, como los ajustes de desarrollador de Android. Nadie lo
+  // encuentra sin que se lo digan, y no hay dos códigos que mantener.
+  const modoPersonal = !!(await db.ajuste(CLAVE_MODO_PERSONAL, false));
+  const sonidoOn = !!(await db.ajuste(CLAVE_SONIDO, true));
   raiz.innerHTML = `
+    ${!modoPersonal ? '' : `
     <div class="ficha">
       <h3 class="ficha-titulo">Sincronizar con el PC</h3>
       <p style="color:var(--texto-2);font-size:.89rem;margin-top:0">
         Apuntas en el gimnasio aunque no haya cobertura. Cuando el móvil vuelve a la WiFi
-        de casa, esto lo manda al PC y JARVIS ya puede analizarlo.</p>
+        de casa, esto lo manda al PC.</p>
       <div class="campo"><label for="a-url">Dirección del PC</label>
         <input type="url" id="a-url" value="${esc(cfg.url)}" placeholder="http://192.168.1.39:8770"></div>
       <div class="campo"><label for="a-token">Clave (opcional)</label>
@@ -4395,7 +5958,7 @@ async function pintarAjustes(raiz) {
       <p id="a-estado" style="font-size:.88rem;color:var(--texto-2);margin-bottom:0">
         ${pend ? `<span class="estado-sync pendiente">${pend} cambios esperando WiFi</span>` : '<span class="estado-sync ok">Todo sincronizado</span>'}
       </p>
-    </div>
+    </div>`}
 
     <div class="ficha">
       <h3 class="ficha-titulo">Aspecto</h3>
@@ -4408,21 +5971,87 @@ async function pintarAjustes(raiz) {
             </span>
             <span class="tema-nombre">${t.nombre}</span>
           </button>`).join('')}
+        ${mios.map((t, i) => {
+          const m = muestraDe(t);
+          return `
+          <button class="tema" data-mio="${i}" aria-pressed="${tema === 'propio' && propio.nombre === t.nombre}">
+            <span class="tema-muestra" style="background:${m.fondo};border-color:${m.borde}">
+              <span style="background:${m.acento}"></span>
+              <span style="background:${m.texto}"></span>
+            </span>
+            <span class="tema-nombre">${esc(t.nombre)}</span>
+            <span class="tema-borrar" data-borrar="${i}" role="button" tabindex="0"
+              aria-label="Borrar el tema ${esc(t.nombre)}">×</span>
+          </button>`;
+        }).join('')}
+        <button class="tema tema-nuevo" id="a-estudio">
+          <span class="tema-muestra tema-mas">+</span>
+          <span class="tema-nombre">Hacer uno</span>
+        </button>
       </div>
-      <div class="propio ${tema === 'propio' ? '' : 'oculto'}" id="zona-propio">
-        <div class="propio-fila">
-          <label for="a-color">Tu color</label>
-          <input type="color" id="a-color" value="${esc(propio.acento)}">
-        </div>
-        <div class="chips" style="margin-top:8px">
-          <button class="chip" data-base="oscuro" aria-pressed="${propio.base === 'oscuro'}">Sobre oscuro</button>
-          <button class="chip" data-base="claro" aria-pressed="${propio.base === 'claro'}">Sobre claro</button>
-        </div>
-        <p class="nut-media" style="margin-bottom:0">Los colores de las <b>gráficas</b> no
-          cambian: están elegidos para que se distingan también con daltonismo y con el
-          móvil al sol. Lo que eliges aquí es el color de los botones y los detalles.</p>
-      </div>
+      <p class="nut-media" style="margin-bottom:0">Colores, fondo, esquinas y tamaño de la
+        letra. Los temas se pueden <b>guardar, exportar e importar</b>: toca «Hacer uno».</p>
     </div>
+
+    <!-- ESTA VERSIÓN, Y SI EL MAPA LLEGA A OPENSTREETMAP.  (1-sep-2026)
+         Existe por dos motivos concretos, los dos de esta semana:
+
+         1. «El mapa está roto» se arregló en la 0.18.0, pero no había forma de
+            saber QUÉ VERSIÓN tiene puesta el móvil, así que no se podía
+            distinguir «sigue roto» de «todavía no has instalado el arreglo».
+            Ahora se ve el número, y el de la caché del service worker al lado:
+            si el APK es nuevo y la caché es vieja, es que abrió sin cobertura.
+
+         2. El mapa habla con OpenStreetMap, y desde el ordenador donde se
+            programa esa salida está BLOQUEADA: los tests usan un Nominatim y
+            unas teselas fingidas. O sea que el único sitio del mundo donde se
+            puede saber si el mapa funciona de verdad es este móvil. -->
+    <div class="ficha">
+      <h3 class="ficha-titulo">Esta versión</h3>
+      <p class="nut-media" style="margin-top:0" id="a-linea-version">App <b id="a-version">…</b> ·
+        caché <b id="a-cache">…</b>${modoPersonal ? ' · <b>modo personal</b>' : ''}</p>
+      <div class="botonera" style="margin-top:0">
+        <button class="boton boton-2" id="a-probar-mapa">Probar el mapa</button>
+        <button class="boton boton-2" id="a-efectos">Efectos en alta</button>
+      </div>
+      <div id="a-mapa-resultado"></div>
+      <p class="nut-media" id="a-efectos-estado" style="margin-bottom:0"></p>
+      <p class="nut-media" style="margin-bottom:0">Si el mapa no va, dale y pásame lo que
+        salga: dice si el problema es la conexión, el buscador de direcciones o las
+        imágenes del mapa. Sin eso solo se puede adivinar.</p>
+    </div>
+
+    <!-- La cola vive en su propia pantalla (Perfil › Moderación). Aquí solo
+         está la puerta, y solo si esta cuenta modera — lo dice la BASE
+         (soy_moderador), no este HTML: esconder un botón no es un permiso. -->
+    <div class="ficha" id="a-moderacion" hidden>
+      <h3 class="ficha-titulo">Moderación</h3>
+      <p class="nut-media" style="margin-top:0">Solicitudes de gimnasio y denuncias.</p>
+      <button class="boton boton-2" id="a-mod-abrir">Abrir el panel</button>
+    </div>
+
+    <div class="ficha">
+      <h3 class="ficha-titulo">Sonido y vibración</h3>
+      <div class="cfg-opcion">
+        <div class="cfg-opcion-texto">
+          <b>Sonido</b>
+          <span>Los golpes de abrir una caja y de desbloquear una medalla. Se sintetizan en el
+            momento: no se descarga nada y no pesan nada.</span>
+        </div>
+        <button type="button" class="interruptor" id="a-sonido" role="switch"
+                aria-checked="${sonidoOn}" aria-label="Sonido"><span></span></button>
+      </div>
+      <p class="campo-nota" style="margin-bottom:0">La vibración la manda tu móvil: si la tienes
+        apagada en los ajustes del sistema, aquí tampoco vibrará.</p>
+    </div>
+${!modoPersonal ? '' : `
+    <div class="ficha">
+      <h3 class="ficha-titulo">Banco de pruebas</h3>
+      <p style="color:var(--texto-2);font-size:.89rem;margin-top:0">
+        Magnesio y cajas de mentira para ver las animaciones del vestuario sin esperar
+        cuarenta días. Queda marcado como de pruebas.</p>
+      <button class="boton boton-2" id="a-banco">Abrir el banco de pruebas</button>
+    </div>`}
 
     <div class="ficha">
       <h3 class="ficha-titulo">Datos</h3>
@@ -4443,9 +6072,45 @@ async function pintarAjustes(raiz) {
       <button class="boton boton-2" id="a-creditos">Ver los ${fotos.CREDITOS.length} autores</button>
     </div>
 
-    <p style="text-align:center;color:var(--texto-tenue);font-size:.8rem">GYM · para JARVIS · v0.8.0</p>`;
+    <p style="text-align:center;color:var(--texto-tenue);font-size:.8rem">GYM · <span id="a-pie-version">…</span></p>`;
 
-  $('#a-probar', raiz).onclick = async () => {
+  $('#a-sonido', raiz).onclick = async () => {
+    const nuevo = !sonidoOn;
+    await db.ponAjuste(CLAVE_SONIDO, nuevo);
+    SON.configurar({ sonido: nuevo });
+    // Se oye al encenderlo: un interruptor de sonido que no suena al darle deja
+    // con la duda de si ha hecho algo.
+    if (nuevo) SON.toque();
+    pintar();
+  };
+  const banco = $('#a-banco', raiz);
+  if (banco) banco.onclick = () => VEST.hojaBanco(puenteVestuario());
+
+  // El interruptor del modo personal: siete toques en la línea de la versión.
+  // Va aquí y no en un ajuste visible porque el ajuste visible sería justo la
+  // referencia que Carlos quiere que no exista.
+  const lineaVersion = $('#a-linea-version', raiz);
+  if (lineaVersion) {
+    let toques = 0;
+    let reloj = null;
+    lineaVersion.onclick = async () => {
+      clearTimeout(reloj);
+      reloj = setTimeout(() => { toques = 0; }, 1800);
+      toques++;
+      if (toques < 7) {
+        if (toques >= 4) aviso(`${7 - toques} más…`, 900);
+        return;
+      }
+      toques = 0;
+      const nuevoModo = !modoPersonal;
+      await db.ponAjuste(CLAVE_MODO_PERSONAL, nuevoModo);
+      _modoPersonal = nuevoModo;
+      aviso(nuevoModo ? 'Modo personal activado' : 'Modo personal desactivado', 2600);
+      pintar();
+    };
+  }
+
+  if (modoPersonal) $('#a-probar', raiz).onclick = async () => {
     const url = $('#a-url', raiz).value.trim();
     await sync.configurar({ url, token: $('#a-token', raiz).value.trim() });
     $('#a-estado', raiz).textContent = 'Probando…';
@@ -4454,7 +6119,7 @@ async function pintarAjustes(raiz) {
       ? `<span class="estado-sync ok">Conectado con ${esc(r.servidor)}</span>`
       : `<span class="estado-sync pendiente">Sin conexión: ${esc(r.motivo)}</span>`;
   };
-  $('#a-sync', raiz).onclick = async () => {
+  if (modoPersonal) $('#a-sync', raiz).onclick = async () => {
     await sync.configurar({ url: $('#a-url', raiz).value.trim(), token: $('#a-token', raiz).value.trim() });
     // `forzar`: este botón es el único sitio donde Carlos pide sincronizar a
     // propósito, así que salta el bloqueo de localhost. Todo lo demás (cada
@@ -4468,7 +6133,7 @@ async function pintarAjustes(raiz) {
 
   // Buscar el PC: la respuesta al «se me olvida la ip». No hace falta que la
   // recuerde — la app la encuentra sola barriendo la subred.
-  $('#a-buscar', raiz).onclick = async () => {
+  if (modoPersonal) $('#a-buscar', raiz).onclick = async () => {
     const btn = $('#a-buscar', raiz);
     const zona = $('#a-direcciones', raiz);
     btn.disabled = true;
@@ -4479,8 +6144,8 @@ async function pintarAjustes(raiz) {
     btn.disabled = false;
     if (!r.ok) {
       zona.innerHTML = `<p class="nut-media">No lo encontré: ${esc(r.motivo)}.
-        ¿Está el PC encendido y en la misma WiFi? Pregúntale a JARVIS
-        «dime todas las IPs» y ponla a mano arriba.</p>`;
+        ¿Está el PC encendido y en la misma WiFi? Mira su IP en la red local y
+        ponla a mano arriba.</p>`;
       return;
     }
     $('#a-url', raiz).value = r.url;
@@ -4490,39 +6155,49 @@ async function pintarAjustes(raiz) {
     await mostrarDirecciones(raiz);
   };
 
-  mostrarDirecciones(raiz);
+  if (modoPersonal) mostrarDirecciones(raiz);
 
 
   $$('[data-tema]', raiz).forEach(
     (b) =>
       (b.onclick = async () => {
-        aplicarTema(b.dataset.tema, await temaPropio());
+        tocar();
+        aplicarTema(b.dataset.tema, await temaPropio(), { suave: true });
         await db.ponAjuste('tema', b.dataset.tema);
         pintar();
       })
   );
 
-  // El color propio se aplica MIENTRAS se arrastra el selector (`oninput`), no
-  // al soltarlo: elegir un color sin ver el resultado es elegir a ciegas.
-  const iColor = $('#a-color', raiz);
-  if (iColor) {
-    const guardar = async (cambios) => {
-      const nuevo = { ...(await temaPropio()), ...cambios };
-      await db.ponAjuste('tema_propio', nuevo);
-      await db.ponAjuste('tema', 'propio');
-      aplicarTema('propio', nuevo);
-      return nuevo;
-    };
-    iColor.oninput = () => aplicarTema('propio', { ...propio, acento: iColor.value });
-    iColor.onchange = async () => {
-      await guardar({ acento: iColor.value });
-      pintar();
-    };
-    $$('[data-base]', raiz).forEach((b) => (b.onclick = async () => {
-      await guardar({ base: b.dataset.base, acento: iColor.value });
-      pintar();
-    }));
-  }
+  // Elegir uno de los suyos: se pone y ya. Editarlo es entrar al estudio, que
+  // es donde están los mandos; una lista con siete mandos por fila no es una
+  // lista, es un panel de control.
+  $$('[data-mio]', raiz).forEach((b) => (b.onclick = async (e) => {
+    if (e.target.hasAttribute('data-borrar')) return;
+    tocar();
+    await ponerTemaPropio(mios[Number(b.dataset.mio)]);
+    pintar();
+  }));
+
+  $$('[data-borrar]', raiz).forEach((x) => (x.onclick = async (e) => {
+    e.stopPropagation();
+    const t = mios[Number(x.dataset.borrar)];
+    if (!await preguntar(`¿Borrar el tema «${t.nombre}»?`)) return;
+    await guardarTemas(mios.filter((_, i) => i !== Number(x.dataset.borrar)));
+    // Si el que se borra es el que está puesto, la app vuelve al oscuro: dejar
+    // puesto un tema que ya no está en la lista es cómo se llega a un ajuste
+    // que no se puede volver a elegir.
+    if (tema === 'propio' && propio.nombre === t.nombre) {
+      await db.ponAjuste('tema', 'oscuro');
+      aplicarTema('oscuro', null, { suave: true });
+    }
+    pintar();
+  }));
+
+  $('#a-estudio', raiz).onclick = () => {
+    tocar();
+    estudioDeTemas(tema === 'propio' ? propio : { ...propio, nombre: 'El mío' }, () => pintar());
+  };
+
   $('#a-creditos', raiz).onclick = () => {
     // Cada línea enlaza a la página del archivo en Commons: es donde vive la
     // licencia completa, que es lo que de verdad exige la atribución.
@@ -4540,6 +6215,106 @@ async function pintarAjustes(raiz) {
        ).join('')}</div>`
     );
   };
+  /* ------------------------------------------------- versión y prueba del mapa */
+  (async () => {
+    const v = $('#a-version', raiz);
+    const c = $('#a-cache', raiz);
+    if (!v) return;
+    // La versión de la app la dice el propio manifiesto, para que no haya un
+    // número escrito a mano en dos sitios que se puedan separar.
+    const pie = $('#a-pie-version', raiz);
+    try {
+      const r = await fetch('./manifest.webmanifest', { cache: 'no-store' });
+      const m = await r.json();
+      v.textContent = m.version || '—';
+      // El pie sale del MISMO sitio. Antes decía «GYM · para JARVIS · v0.15.0»
+      // escrito a mano, o sea que llevaba tres versiones mintiendo.
+      if (pie) pie.textContent = `v${m.version || '—'}`;
+    } catch (_) {
+      v.textContent = '—';
+      if (pie) pie.textContent = '';
+    }
+    // Y la de la caché la dice el service worker que esté MANDANDO ahora, que
+    // es lo que de verdad decide qué código se está ejecutando.
+    try {
+      const cs = await caches.keys();
+      const gym = cs.filter((x) => x.startsWith('gym-v'));
+      c.textContent = gym.length ? gym.join(', ').replace(/gym-/g, '') : 'sin caché';
+    } catch (_) {
+      c.textContent = '—';
+    }
+  })();
+
+  const bMapa = $('#a-probar-mapa', raiz);
+  if (bMapa) bMapa.onclick = async () => {
+    const zona = $('#a-mapa-resultado', raiz);
+    bMapa.disabled = true;
+    zona.innerHTML = '<p class="mapa-vacio">Probando…</p>';
+    const r = await geo.probar();
+    bMapa.disabled = false;
+    zona.innerHTML = `
+      <div class="diag">
+        <div class="diag-fila"><span>Buscador de calles</span><b>${esc(r.buscador)}</b></div>
+        <div class="diag-fila"><span>Buscar por nombre</span><b>${esc(r.sitios || '')}</b></div>
+        <div class="diag-fila"><span>Qué dice cada uno</span><b>${esc(r.fuentes || '')}</b></div>
+        <div class="diag-fila"><span>Imágenes del mapa</span><b>${esc(r.teselas)}</b></div>
+        <div class="diag-fila"><span>Tu ubicación la da</span><b>${esc(r.ubicacion || '')}</b></div>
+        <div class="diag-fila"><span>Y contesta</span><b>${esc(r.donde || '')}</b></div>
+        <div class="diag-fila"><span>Origen de la app</span><b>${esc(r.origen)}</b></div>
+        <div class="diag-fila"><span>Servidores del mapa</span><b>${esc(r.de || '')}</b></div>
+      </div>`;
+  };
+
+  /* --------------------------------------------------------------- efectos
+   * Los efectos del vestuario en alta (0.37.0).
+   *
+   * La descarga va sola en el primer arranque con red, así que este botón es
+   * para los dos casos en que hace falta a mano: el día que se instaló sin
+   * cobertura, y cuando salen piezas nuevas sin publicar una versión del APK.
+   * Y dice CUÁNTAS hay, porque un botón que no cuenta lo que ha hecho no se
+   * puede usar para saber si funcionó.
+   * --------------------------------------------------------------------- */
+  const bEfe = $('#a-efectos', raiz);
+  const zEfe = $('#a-efectos-estado', raiz);
+  const contarEfectos = () => {
+    if (!zEfe) return;
+    const v = PELIS.comoVa();
+    const hay = v.descargadas;
+    zEfe.textContent = v.bajando
+      ? `Bajando los efectos… ${v.hechas}/${v.total}`
+      : hay
+        ? `${hay} efecto${hay === 1 ? '' : 's'} en alta calidad guardados en el móvil.`
+        : 'Lo que llevas puesto se guarda solo. Este botón se baja TODO (unos 127 MB) '
+          + 'para que el vestuario entero se vea en alta también sin cobertura.';
+  };
+  contarEfectos();
+  if (bEfe) bEfe.onclick = async () => {
+    bEfe.disabled = true;
+    const base = await comp.base();
+    if (!base) {
+      if (zEfe) zEfe.textContent = 'No hay dirección de la app en nube.json: no hay de dónde bajarlos.';
+      bEfe.disabled = false;
+      return;
+    }
+    // Aquí SÍ se baja todo: lo ha pedido Carlos a mano y sabe lo que pesa.
+    await PELIS.descargar(base, { alAvanzar: contarEfectos });
+    const v = PELIS.comoVa();
+    contarEfectos();
+    if (v.error && zEfe) zEfe.textContent += ` (algo falló: ${v.error})`;
+    bEfe.disabled = false;
+    // Se repinta para que las piezas nuevas se vean sin salir y volver.
+    pintar();
+  };
+
+  // La puerta al panel, solo si la base dice que esta cuenta modera.
+  (async () => {
+    const caja = $('#a-moderacion', raiz);
+    if (!caja || !nube.usuario() || !(await nube.hayNube())) return;
+    if (!(await social.soyModerador())) return;
+    caja.hidden = false;
+    $('#a-mod-abrir', caja).onclick = () => abrirModeracion();
+  })();
+
   $('#a-exportar', raiz).onclick = exportar;
   $('#a-ejemplo', raiz).onclick = async () => {
     await sembrarGimnasios();
@@ -4548,7 +6323,7 @@ async function pintarAjustes(raiz) {
     pintar();
   };
   $('#a-borrar', raiz).onclick = async () => {
-    if (!confirm('¿Borrar TODOS los datos del móvil? No se puede deshacer.')) return;
+    if (!await preguntar('¿Borrar TODOS los datos del móvil? No se puede deshacer.')) return;
     await db.borrarTodo();
     S.gimnasioId = null;
     await recargar();
@@ -4631,68 +6406,4418 @@ export async function sembrarRutinas() {
 /* ========================================================================== *
  * ARMAZÓN
  * ========================================================================== */
+/**
+ * Añadir VARIAS máquinas al día de una tacada.
+ *
+ * Carlos, 30-ago-2026: *«a la hora de añadir máquinas del día de la rutina se
+ * puedan añadir varias a la vez, como cuando añades las máquinas por gym»*.
+ * Antes cada toque metía UNA y cerraba la hoja: montar un día de seis
+ * ejercicios eran seis aperturas, seis búsquedas y seis cierres.
+ *
+ * Se copia el patrón que ya funciona en `abrirCatalogo`: se van marcando, el
+ * botón cuenta cuántas llevas y se añaden todas al pulsar.
+ *
+ * LAS DOS PESTAÑAS SON LO QUE DE VERDAD AHORRA TIEMPO. Montando un día nuevo lo
+ * normal es descubrir que la máquina ni siquiera está dada de alta en el
+ * gimnasio. Antes había que salir del editor, ir al selector de gimnasio, abrir
+ * el catálogo, añadirla y volver. Aquí, elegir una del catálogo la da de alta
+ * en el gimnasio Y la mete en el día, en el mismo gesto.
+ *
+ * @param yaEnElDia ids que ya están en el plan (no se pueden volver a elegir)
+ * @param alElegir  recibe la lista de ids —los nuevos ya creados en la base—
+ */
+function abrirAnadirAlDia({ yaEnElDia = [], alElegir }) {
+  const dentro = new Set(yaEnElDia);
+  const gim = S.cache.gimnasios.find((g) => g.id === S.gimnasioId);
+  const suyas = S.cache.maquinas.filter((m) => m.gimnasioId === S.gimnasioId);
+  const nombresDelGym = new Set(suyas.map((m) => m.nombre.toLowerCase()));
+
+  // La unidad para las que nazcan del catálogo: la que más usa este gimnasio,
+  // igual que en `abrirCatalogo` (Basic-Fit va en libras).
+  const enLb = suyas.filter((m) => m.unidad === 'lb').length;
+  const unidad = suyas.length && enLb > suyas.length / 2 ? 'lb' : 'kg';
+
+  const misElegidas = new Set();     // ids de máquinas que ya tiene el gimnasio
+  const nuevasElegidas = new Set();  // nombres del catálogo, aún sin crear
+  let pestana = 'mias';
+  let consulta = '';
+
+  const nombreGrupo = (g) => (D.GRUPOS.find((x) => x.id === g) || {}).nombre || '';
+
+  hoja(
+    'Añadir al día',
+    `
+    <div class="chips" id="ad-pestanas" role="tablist">
+      <button class="chip" data-p="mias" role="tab">En este gimnasio</button>
+      <button class="chip" data-p="catalogo" role="tab">Del catálogo</button>
+    </div>
+    <input class="buscador" type="search" id="ad-buscar" placeholder="Buscar ejercicio…" aria-label="Buscar ejercicio">
+    <p class="campo-nota" id="ad-nota" hidden></p>
+    <div class="lista" id="ad-lista"></div>
+    <div class="barra-accion">
+      <button class="boton" id="ad-anadir" disabled>Añadir</button>
+    </div>`,
+    (cuerpo, cerrar) => {
+      const lista = $('#ad-lista', cuerpo);
+      const boton = $('#ad-anadir', cuerpo);
+      const buscador = $('#ad-buscar', cuerpo);
+      const nota = $('#ad-nota', cuerpo);
+
+      const cuantas = () => misElegidas.size + nuevasElegidas.size;
+
+      const refrescarBoton = () => {
+        const n = cuantas();
+        boton.disabled = n === 0;
+        boton.textContent = n ? `Añadir ${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}` : 'Añadir';
+      };
+
+      /**
+       * Una fila marcable.
+       *
+       * La marca va a la IZQUIERDA y ocupa un hueco fijo aunque esté vacía. Si
+       * apareciera y desapareciera, el nombre bailaría a cada toque, y con seis
+       * toques seguidos eso marea. El estado no se fía solo del color: hay un
+       * check dibujado, el borde de acento y `aria-pressed` para TalkBack.
+       */
+      const fila = (nombre, grupo, marcada, dibujo) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'elige-multi';
+        b.setAttribute('aria-pressed', marcada);
+        b.innerHTML = `
+          <span class="elige-marca" aria-hidden="true">${icono('tic', 16)}</span>
+          <span class="elige-dibujo">${dibujo}</span>
+          <span class="elige-texto">
+            <span class="elige-nombre">${esc(nombre)}</span>
+            <span class="elige-grupo">${esc(nombreGrupo(grupo))}</span>
+          </span>`;
+        return b;
+      };
+
+      const pintarMias = () => {
+        const libres = suyas
+          .filter((m) => !dentro.has(m.id))
+          .filter((m) => !consulta || quitarTildes(m.nombre).includes(quitarTildes(consulta)))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+        if (!libres.length) {
+          // Vacío CON SALIDA: decir «no hay» y dejar ahí el botón que lo
+          // resuelve. Una pantalla en blanco obliga a adivinar qué hacer.
+          lista.innerHTML = `
+            <p class="grafica-vacia">${suyas.length
+              ? 'Ya has metido en el día todas las máquinas de este gimnasio.'
+              : `${esc(gim ? gim.nombre : 'Este gimnasio')} todavía no tiene máquinas.`}<br>
+              <button class="boton-plano" id="ad-ir-catalogo">Buscar en el catálogo →</button></p>`;
+          const ir = $('#ad-ir-catalogo', lista);
+          if (ir) ir.onclick = () => elegirPestana('catalogo');
+          return;
+        }
+
+        lista.innerHTML = '';
+        for (const m of libres) {
+          const b = fila(m.nombre, m.grupo, misElegidas.has(m.id),
+            cat.imagenEjercicio(m.nombre, m.icono, m.grupo));
+          b.onclick = () => {
+            if (misElegidas.has(m.id)) misElegidas.delete(m.id);
+            else misElegidas.add(m.id);
+            b.setAttribute('aria-pressed', misElegidas.has(m.id));
+            refrescarBoton();
+          };
+          lista.appendChild(b);
+        }
+      };
+
+      // El catálogo tiene 1.365 ejercicios. Pintarlos de golpe son 1.365 SVG en
+      // el DOM y casi un segundo de hilo bloqueado en un móvil normal, así que
+      // se pinta a trozos igual que en `abrirCatalogo`.
+      const TROZO = 60;
+      let visibles = TROZO;
+      let resultados = [];
+
+      const pintarPie = () => {
+        const viejo = $('#ad-mas', cuerpo);
+        if (viejo) viejo.remove();
+        const quedan = resultados.length - visibles;
+        if (quedan <= 0) return;
+        const b = document.createElement('button');
+        b.id = 'ad-mas';
+        b.className = 'boton boton-2';
+        b.textContent = `Ver ${Math.min(quedan, TROZO)} más (quedan ${quedan})`;
+        b.onclick = () => {
+          const desde = visibles;
+          visibles += TROZO;
+          pintarTrozoCatalogo(desde);
+        };
+        lista.appendChild(b);
+      };
+
+      const pintarTrozoCatalogo = (desde) => {
+        const frag = document.createDocumentFragment();
+        for (const e of resultados.slice(desde, visibles)) {
+          const b = fila(e.n, e.g, nuevasElegidas.has(e.n),
+            cat.imagenEjercicio(e.n, e.i, e.g));
+          b.classList.add('elige-nueva');
+          b.onclick = () => {
+            if (nuevasElegidas.has(e.n)) nuevasElegidas.delete(e.n);
+            else nuevasElegidas.add(e.n);
+            b.setAttribute('aria-pressed', nuevasElegidas.has(e.n));
+            refrescarBoton();
+          };
+          frag.appendChild(b);
+        }
+        lista.appendChild(frag);
+        pintarPie();
+      };
+
+      const pintarCatalogo = () => {
+        // Las que el gimnasio YA tiene no se repiten aquí: para esas está la
+        // otra pestaña, y dar de alta dos «press de banca» ensucia el historial
+        // (cada máquina se compara solo consigo misma).
+        resultados = cat.buscar(consulta, '').filter((e) => !nombresDelGym.has(e.n.toLowerCase()));
+        visibles = TROZO;
+        lista.innerHTML = '';
+        if (!resultados.length) {
+          lista.innerHTML = `<p class="grafica-vacia">Nada con ese nombre en el catálogo.
+            Puedes crearla a mano desde el selector de gimnasio.</p>`;
+          return;
+        }
+        pintarTrozoCatalogo(0);
+      };
+
+      const pintarLo = () => (pestana === 'mias' ? pintarMias() : pintarCatalogo());
+
+      const elegirPestana = (p) => {
+        pestana = p;
+        $$('[data-p]', cuerpo).forEach((x) => x.setAttribute('aria-pressed', x.dataset.p === p));
+        buscador.placeholder = p === 'mias' ? 'Buscar entre las tuyas…' : 'Buscar entre 1.365 ejercicios…';
+        // El aviso de que se darán de alta va UNA vez aquí arriba y no en cada
+        // fila: repetirlo 1.365 veces es ruido que hay que leer y saltar en
+        // cada línea.
+        nota.hidden = p !== 'catalogo';
+        nota.innerHTML = `Las que marques aquí se darán de alta en
+          <b>${esc(gim ? gim.nombre : 'el gimnasio')}</b> y entrarán en el día.`;
+        pintarLo();
+      };
+
+      $$('[data-p]', cuerpo).forEach((b) => (b.onclick = () => elegirPestana(b.dataset.p)));
+      buscador.oninput = () => {
+        consulta = buscador.value;
+        pintarLo();
+      };
+
+      boton.onclick = async () => {
+        const ids = [...misElegidas];
+        // Las del catálogo se crean AQUÍ, no al marcarlas: si Carlos cierra la
+        // hoja sin darle a «Añadir», el gimnasio no se queda con máquinas que
+        // no pidió.
+        for (const nombre of nuevasElegidas) {
+          const e = cat.ejercicio(nombre);
+          if (!e) continue;
+          const m = await db.guardar('maquinas', {
+            gimnasioId: S.gimnasioId,
+            nombre: e.n,
+            grupo: e.g,
+            tipo: e.t,
+            icono: e.i,
+            unidad,
+            incremento: unidad === 'lb' ? 5 : 2.5,
+            notas: '',
+            foto: null,
+          });
+          ids.push(m.id);
+        }
+        if (nuevasElegidas.size) {
+          await recargar();
+          sync.sincronizar({ silencioso: true });
+        }
+        cerrar();
+        await alElegir(ids);
+        const n = ids.length;
+        aviso(`${n} ${n === 1 ? 'ejercicio' : 'ejercicios'} al día${nuevasElegidas.size
+          ? ` · ${nuevasElegidas.size} ${nuevasElegidas.size === 1 ? 'dada' : 'dadas'} de alta en el gimnasio` : ''}`);
+      };
+
+      elegirPestana('mias');
+      refrescarBoton();
+    },
+    {
+      hayTrabajo: () => misElegidas.size + nuevasElegidas.size > 0,
+      avisoSalir: 'Vas a perder los ejercicios que has marcado.',
+    }
+  );
+}
+
+
+/* ========================================================================== *
+ * VISTA: PERFIL  (v0.15.0)
+ * ========================================================================== *
+ * Carlos, 30-ago-2026: *«un sistema de perfiles para que la gente pueda ponerse
+ * foto de perfil, que se vea la racha que lleva, pequeños logros, veteranía,
+ * insignias (…) que la gente pueda compartir las rutinas que él sigue, sus
+ * series, sus repeticiones, una descripción de la persona, sus propias
+ * anotaciones, medallas en función de PR»*.
+ *
+ * QUÉ SE GUARDA Y QUÉ SE CALCULA — la decisión que sostiene toda la pantalla.
+ * Se GUARDA solo lo que Carlos escribe: alias, nombre, bio, anotaciones y qué
+ * medallas quiere lucir. NO se guarda ni una insignia ni la racha: se calculan
+ * de las series cada vez que se abre. Es la misma regla que ya rige el progreso
+ * de las metas en `metas.js`, y por el mismo motivo: un logro guardado se queda
+ * viejo el día que se corrige una serie mal apuntada, y te quedarías con una
+ * medalla que ya no te corresponde.
+ *
+ * EL ORDEN DE LA PANTALLA no es decorativo. Arriba, quién eres y la racha: es
+ * lo que se mira al abrirla. Después las cifras, las medallas y las insignias.
+ * La cuenta y los ajustes, abajo del todo: se tocan una vez al año.
+ */
+
+/** El perfil, con los huecos rellenos. Nunca devuelve null. */
+function perfilActual() {
+  const p = S.cache.perfil || {};
+  return {
+    id: p.id || 'yo',
+    alias: p.alias || '',
+    // Las mayúsculas del nombre de usuario, tal y como se escribieron. El
+    // `alias` de arriba va siempre en minúsculas porque es la dirección; este
+    // es el que se ENSEÑA. Carlos, 31-ago-2026: «ni en mayúsculas».
+    aliasVisible: p.aliasVisible || p.alias || '',
+    nombre: p.nombre || '',
+    bio: p.bio || '',
+    fotoUrl: p.fotoUrl || '',
+    publico: p.publico ? 1 : 0,
+    medallasElegidas: Array.isArray(p.medallasElegidas) ? p.medallasElegidas : [],
+    notas: Array.isArray(p.notas) ? p.notas : [],
+  };
+}
+
+async function guardarPerfil(cambios) {
+  const p = { ...perfilActual(), ...cambios, id: 'yo' };
+  await db.guardar('perfil', p);
+  await recargar();
+  sync.sincronizar({ silencioso: true });
+  return p;
+}
+
+/** Todo lo que se ha ganado, calculado de las series. */
+function calculoPerfil() {
+  return PF.calcular(S.cache);
+}
+
+/* ==========================================================================
+ * CUANDO SE DESBLOQUEA UNA MEDALLA  (v0.23.0)
+ *
+ * Carlos: *«me gustaría que cuando desbloqueas una medalla haciendo un
+ * ejercicio saliese una animación, como agitando la medalla que tuvieses, y
+ * que se fuese transformando en la siguiente medalla»*.
+ *
+ * Es exactamente eso y en ese orden: la pieza que TENÍAS —la silueta apagada
+ * si la medalla es nueva, o la piedra del material viejo si lo que ha subido
+ * es el material— tiembla, y de ahí sale la nueva.
+ *
+ * POR QUÉ NO HAY LIBRERÍA DE ANIMACIÓN
+ * ------------------------------------
+ * Porque la regla del proyecto es CERO peticiones a internet en la interfaz, y
+ * las librerías de animación viven en un CDN. Esto son fotogramas de CSS: pesan
+ * cero, no bloquean nada y las mueve el compositor del navegador.
+ *
+ * LOS TIEMPOS NO SON A OJO. Cada golpe está por debajo de 300 ms —que es el
+ * techo de una micro-interacción— y encadenados con retardo, no alargados:
+ *   0-180   la pantalla entra
+ *   180-620 la pieza vieja TIEMBLA (cinco golpes de 88 ms)
+ *   620-900 se encoge, destella y sale la nueva
+ *   900+    el nombre sube
+ * Se va sola a los 3,4 s, o antes si se toca.
+ *
+ * Y CON `prefers-reduced-motion` NO TIEMBLA NADA: se funde una en otra y ya.
+ * Quien pide menos movimiento no está pidiendo perderse la medalla.
+ * ========================================================================== */
+
+/** Una foto de lo ganado: id de medalla → material. Para comparar después. */
+function fotoDeMedallas(calc) {
+  const m = new Map();
+  for (const x of calc.medallasGanadas) m.set(x.id, x.material || 'hierro');
+  return m;
+}
+
+/**
+ * Compara dos fotos y celebra el primer cambio que encuentre.
+ *
+ * SOLO EL PRIMERO a propósito: si alguien apunta una serie que desbloquea tres
+ * medallas de golpe, encadenar tres celebraciones de tres segundos y medio es
+ * castigar a quien acaba de hacerlo bien. Se enseña la mejor —la de más nivel—
+ * y el resto ya están en el perfil.
+ */
+function celebrarSiHayNuevas(antes, calc) {
+  const ahora = fotoDeMedallas(calc);
+  const cambios = [];
+  for (const [id, mat] of ahora) {
+    const matAntes = antes.get(id);
+    if (matAntes === undefined) cambios.push({ id, material: mat, nueva: true });
+    else if (matAntes !== mat) cambios.push({ id, material: mat, antes: matAntes, nueva: false });
+  }
+  if (!cambios.length) return false;
+  // Primero las medallas nuevas, y de esas la de más nivel: es la que más
+  // cuesta y la que uno quiere ver.
+  cambios.sort((a, b) => (Number(b.nueva) - Number(a.nueva))
+    || ((INS.MEDALLA_POR_ID.get(b.id)?.nivel || 0) - (INS.MEDALLA_POR_ID.get(a.id)?.nivel || 0)));
+  const c = cambios[0];
+  const medalla = calc.medallasGanadas.find((x) => x.id === c.id);
+  if (!medalla) return false;
+  celebrarMedalla(medalla, c);
+  return true;
+}
+
+/**
+ * La pantalla de celebración. Se cierra sola, o al tocarla.
+ *
+ * Se EXPORTA para poder dispararla desde `pc/test_medalla_fiesta.py` en los tres
+ * instantes que la definen: con la serie de verdad no se puede elegir el
+ * momento de la captura, y una animación que no se ha visto no está terminada.
+ */
+export function celebrarMedalla(medalla, cambio) {
+  // La pieza de ANTES: la silueta apagada si la medalla es nueva, o la misma
+  // piedra con el material viejo si lo que ha subido es el material.
+  const svgAntes = cambio.nueva
+    ? INS.dibujarMedalla(medalla, false, 132)
+    : INS.dibujarMedalla({ ...medalla, material: cambio.antes }, true, 132);
+  const svgAhora = INS.dibujarMedalla(medalla, true, 132);
+  const mat = INS.MATERIAL_POR_ID.get(cambio.material);
+  const lev = INS.LEVANTAMIENTO_POR_ID.get(medalla.levantamiento);
+
+  const capa = document.createElement('div');
+  capa.className = 'fiesta';
+  capa.setAttribute('role', 'dialog');
+  capa.setAttribute('aria-live', 'assertive');
+  capa.innerHTML = `
+    <div class="fiesta-caja">
+      <div class="fiesta-pieza">
+        <span class="fiesta-rayos" aria-hidden="true"></span>
+        <span class="fiesta-antes" aria-hidden="true">${svgAntes}</span>
+        <span class="fiesta-ahora">${svgAhora}</span>
+      </div>
+      <p class="fiesta-titulo">${cambio.nueva ? 'Medalla desbloqueada' : 'Material mejorado'}</p>
+      <p class="fiesta-nombre">${esc(medalla.nombre)}</p>
+      <p class="fiesta-pie">${esc([lev ? lev.nombre : '',
+        medalla.kg ? `${medalla.kg} kg` : '',
+        mat ? mat.nombre : ''].filter(Boolean).join(' · '))}</p>
+      <p class="fiesta-toca">Toca para cerrar</p>
+    </div>`;
+  document.body.appendChild(capa);
+  // EL SONIDO Y LA VIBRACIÓN (3-sep-2026). Carlos: *«si puedes pulir la de
+  // cuando desbloqueas nuevas medallas (…) le falta sonido, que vibre más. Es
+  // que subir el sonido estaría muy bien, así como satisfactorio»*. La
+  // animación ya estaba desde la 0.22.0; lo que faltaba era esto, y va DENTRO
+  // del mismo instante en que la pieza nueva sale: separarlos medio segundo es
+  // lo que hace que un móvil parezca estropeado.
+  SON.celebrarLogro();
+
+  let fuera = false;
+  const cerrar = () => {
+    if (fuera) return;
+    fuera = true;
+    clearTimeout(reloj);
+    capa.classList.add('fiesta-fin');
+    // Se quita cuando termina de irse; si la animación no llega a dispararse
+    // (pestaña en segundo plano) el reloj de reserva lo saca igual.
+    setTimeout(() => capa.remove(), 320);
+  };
+  capa.onclick = cerrar;
+  const reloj = setTimeout(cerrar, 3400);
+}
+
+/* ==========================================================================
+ * EL VESTUARIO  (v0.32.0)
+ *
+ * Aquí solo está el PUENTE: leer y guardar el estado, y las cuatro utilidades
+ * de la app que la pantalla del vestuario necesita. Todo lo demás —qué toca,
+ * cuánto cuesta, cómo se anima— vive en `vestuario.js` y en `cajas.js`.
+ * ======================================================================== */
+function vestuarioActual() {
+  return CAJ.normalizar(S.cache.vestuario || CAJ.estadoInicial(hoyISO()));
+}
+
+async function guardarVestuario(nuevo) {
+  const v = { ...CAJ.normalizar(nuevo, hoyISO()), id: 'yo' };
+  await db.guardar('vestuario', v);
+  await recargar();
+  sync.sincronizar({ silencioso: true });
+  return v;
+}
+
+/**
+ * Estrenar el vestuario: deja escrito DESDE CUÁNDO cuentan las cajas.
+ *
+ * Se hace al entrar por primera vez y no antes, y es lo que impide que alguien
+ * con dos años de historial abra la pantalla y se encuentre 300 cajas: eso
+ * sería la colección entera en una tarde y ni una razón para volver mañana.
+ */
+async function estrenarVestuario() {
+  if (S.cache.vestuario) return vestuarioActual();
+  return guardarVestuario(CAJ.estadoInicial(hoyISO()));
+}
+
+/* La foto para las vistas previas del vestuario. Se rehace en cada pintada
+ * porque `pintar()` revoca todas las URL de Blob al empezar: guardarla entre
+ * pintadas daría una foto rota, que es peor que ninguna. */
+let _fotoVest = null;
+
+async function pintarVestuarioVista(raiz) {
+  await estrenarVestuario();
+  const guardada = await db.avatar();
+  _fotoVest = guardada && guardada.blob ? urlDe(guardada.blob) : (perfilActual().fotoUrl || null);
+  VEST.pintarVestuario(raiz, puenteVestuario());
+}
+
+/* El modo personal se lee de la base (es un ajuste) y la pantalla del vestuario
+ * necesita saberlo para enseñar el banco de pruebas. Se cachea al arrancar y al
+ * cambiarlo: leerlo en cada pintada sería una consulta a IndexedDB por cada
+ * repintado de una pantalla que se repinta mucho. */
+let _modoPersonal = false;
+
+/** El puente que se le pasa a `vestuario.js`. */
+function puenteVestuario() {
+  const p = perfilActual();
+  return {
+    modoPersonal: () => _modoPersonal,
+    estado: () => vestuarioActual(),
+    guardar: (nuevo) => guardarVestuario(nuevo),
+    resumen: () => calculoPerfil().resumen,
+    nombre: () => p.nombre || p.aliasVisible || p.alias || 'Tu nombre',
+    alias: () => p.aliasVisible || p.alias || '',
+    foto: () => _fotoVest,
+    hoja: (titulo, html, montar, opciones) => hoja(titulo, html, montar, opciones),
+    aviso: (texto, ms) => aviso(texto, ms),
+    tocar: (ms) => tocar(ms),
+    repintar: () => pintar(),
+  };
+}
+
+/* --------------------------------------------------------------------------
+ * LOS LOGROS NUEVOS
+ *
+ * Carlos, 3-sep-2026: *«si puedes pulir la de cuando desbloqueas nuevas
+ * medallas (…) le falta sonido, que vibre más»*.
+ *
+ * Lo que se guarda es qué logros SE HAN ENSEÑADO ya, no cuáles se tienen —eso
+ * se sigue calculando de las series, como manda la casa—. Y la primera vez no
+ * se celebra nada: quien instala la app con dos años de historial tiene veinte
+ * insignias de golpe, y veinte celebraciones seguidas no celebran nada.
+ * ------------------------------------------------------------------------ */
+const CLAVE_LOGROS = 'logros_vistos';
+let _logrosPendientes = [];
+
+async function comprobarLogros() {
+  try {
+    const c = calculoPerfil();
+    // SOLO INSIGNIAS. Las medallas tienen su propia fiesta desde la 0.22.0
+    // (`celebrarSiHayNuevas`), con la pieza vieja transformándose en la nueva.
+    // Celebrar las dos cosas sería celebrar la misma medalla dos veces.
+    const ganados = c.ganadas.map((i) => ({ tipo: 'insignia', id: `i:${i.id}`, pieza: i }));
+    const guardados = await db.ajuste(CLAVE_LOGROS, null);
+    if (!Array.isArray(guardados)) {
+      await db.ponAjuste(CLAVE_LOGROS, ganados.map((g) => g.id));
+      return;
+    }
+    const vistos = new Set(guardados);
+    const nuevos = ganados.filter((g) => !vistos.has(g.id));
+    if (!nuevos.length) return;
+    await db.ponAjuste(CLAVE_LOGROS, [...vistos, ...nuevos.map((g) => g.id)]);
+    _logrosPendientes.push(...nuevos);
+  } catch { /* una celebración no puede tumbar un guardado */ }
+}
+
+/** Se enseña cuando no hay ninguna hoja abierta: si no, taparía lo que se estaba haciendo. */
+function mostrarLogrosPendientes() {
+  if (!_logrosPendientes.length) return;
+  // Ni encima de una hoja, ni de la escena de una caja, ni de la fiesta de una
+  // medalla: dos celebraciones a la vez no son el doble de celebración.
+  if ($('.hoja-fondo') || $('.escena') || $('.logro-capa') || $('.fiesta')) return;
+  // MÁS DE TRES A LA VEZ SE CUENTAN EN UNA SOLA TARJETA. Pasa de verdad: al
+  // restaurar una copia o al sincronizar con el PC pueden aparecer veinte
+  // insignias de golpe, y veinte tarjetas seguidas no se celebran, se cierran a
+  // toda prisa.
+  if (_logrosPendientes.length > 3) return mostrarMuchosLogros();
+  const logro = _logrosPendientes.shift();
+  const quedan = _logrosPendientes.length;
+
+  const capa = document.createElement('div');
+  capa.className = 'logro-capa';
+  capa.setAttribute('role', 'dialog');
+  capa.setAttribute('aria-modal', 'true');
+  capa.setAttribute('aria-label', 'Logro nuevo');
+  const dibujo = INS.dibujarInsignia(logro.pieza, true, 132);
+  capa.innerHTML = `
+    <div class="logro-tarjeta">
+      <p class="logro-que">Insignia nueva</p>
+      <div class="logro-pieza">${dibujo}</div>
+      <h2 class="logro-nombre">${esc(logro.pieza.nombre)}</h2>
+      <p class="logro-pie">${esc(logro.pieza.pie || logro.pieza.descripcion || '')}</p>
+      <button class="boton" id="logro-ok">${quedan ? `Siguiente (${quedan})` : 'Genial'}</button>
+      ${quedan ? `<p class="logro-mas">Te quedan ${quedan} por ver</p>` : ''}
+    </div>`;
+  document.body.appendChild(capa);
+  SON.celebrarLogro();
+
+  const cerrar = () => {
+    capa.remove();
+    // La siguiente entra sola: encadenar es lo que hace que ganar tres cosas a
+    // la vez se sienta como tres cosas y no como una lista.
+    if (_logrosPendientes.length) setTimeout(mostrarLogrosPendientes, 180);
+  };
+  $('#logro-ok', capa).onclick = cerrar;
+  capa.addEventListener('click', (e) => { if (e.target === capa) cerrar(); });
+}
+
+/** Una sola tarjeta para «te han caído doce de golpe». */
+function mostrarMuchosLogros() {
+  const lista = _logrosPendientes.slice();
+  _logrosPendientes = [];
+  const capa = document.createElement('div');
+  capa.className = 'logro-capa';
+  capa.setAttribute('role', 'dialog');
+  capa.setAttribute('aria-modal', 'true');
+  capa.setAttribute('aria-label', 'Logros nuevos');
+  capa.innerHTML = `
+    <div class="logro-tarjeta">
+      <p class="logro-que">Cosecha nueva</p>
+      <div class="logro-pieza logro-monton">${lista.slice(0, 3)
+        .map((l) => INS.dibujarInsignia(l.pieza, true, 84)).join('')}</div>
+      <h2 class="logro-nombre">${lista.length} insignias nuevas</h2>
+      <p class="logro-pie">Están todas en tu perfil.</p>
+      <button class="boton" id="logro-ok">Verlos</button>
+    </div>`;
+  document.body.appendChild(capa);
+  SON.celebrarLogro();
+  const cerrar = () => capa.remove();
+  $('#logro-ok', capa).onclick = () => { cerrar(); irA('perfil'); };
+  capa.addEventListener('click', (e) => { if (e.target === capa) cerrar(); });
+}
+
+/* --------------------------------------------------------------------------
+ * Trozos que se repiten
+ * ------------------------------------------------------------------------ */
+
+/**
+ * El avatar. Sin foto NO se pone un muñeco gris genérico: se ponen las
+ * INICIALES sobre el acento. Un muñeco anónimo se lee como «esto está vacío»;
+ * unas iniciales se leen como «este eres tú».
+ */
+function avatarHTML(perfil, urlFoto, tam = 76) {
+  const iniciales = inicialesDe(perfil.nombre || perfil.alias);
+  const estilo = `width:${tam}px;height:${tam}px;font-size:${Math.round(tam * 0.36)}px`;
+  return urlFoto
+    ? `<img class="pf-foto" style="${estilo}" src="${esc(urlFoto)}" alt="Tu foto de perfil">`
+    : `<span class="pf-foto pf-iniciales" style="${estilo}" aria-hidden="true">${esc(iniciales)}</span>`;
+}
+
+/** Un número grande con su etiqueta. Cifras condensadas, como el resto de la app. */
+function cifraHTML(valor, etiqueta, pista = '') {
+  return `<div class="pf-cifra"${pista ? ` title="${esc(pista)}"` : ''}>
+    <b class="cifra">${esc(valor)}</b><span>${esc(etiqueta)}</span></div>`;
+}
+
+function redondear(n, decimales = 0) {
+  const f = 10 ** decimales;
+  return String(Math.round((Number(n) || 0) * f) / f).replace('.', ',');
+}
+
+/* --------------------------------------------------------------------------
+ * La pantalla
+ * ------------------------------------------------------------------------ */
+
+async function pintarPerfil(raiz) {
+  const perfil = perfilActual();
+  const c = calculoPerfil();
+  const r = c.resumen;
+
+  // La foto vive como Blob en el móvil; la URL de Supabase solo se usa cuando
+  // no hay original (por ejemplo, después de reinstalar la app).
+  const guardada = await db.avatar();
+  const urlFoto = guardada && guardada.blob ? urlDe(guardada.blob) : perfil.fotoUrl;
+
+  const conCuenta = !!nube.usuario();
+  const hayNube = await nube.hayNube();
+
+  // Lo que lleva puesto del vestuario. Se pinta aquí, en su propio perfil, que
+  // es para lo que sirve: una pieza que solo se viera en la pantalla donde se
+  // compra no sería una pieza, sería un cromo.
+  const V = vestuarioActual();
+  const cajasPend = S.cache.vestuario ? CAJ.pendientes(V, c.resumen) : null;
+  const cosFondo = COS.estiloFondo(COS.pieza(V.puesto.fondo));
+  const cosPlaca = COS.estiloPlaca(COS.pieza(V.puesto.placa));
+  const cosMarco = COS.pieza(V.puesto.marco);
+  const cosAura = COS.pieza(V.puesto.aura);
+  const cosTitulo = COS.pieza(V.puesto.titulo);
+
+  const elegidas = perfil.medallasElegidas
+    .map((id) => c.medallas.find((m) => m.id === id))
+    .filter((m) => m && m.ganada);
+
+  // Las insignias del escaparate: las de más nivel primero. Enseñar las de
+  // nivel 1 cuando ya hay de nivel 3 sería enseñar lo peor que tienes.
+  const escaparate = [...c.ganadas].sort((a, b) => b.nivel - a.nivel).slice(0, 6);
+  const conRutinas = S.cache.rutinas.filter((x) => planDe(x).length);
+
+  raiz.innerHTML = `
+    <!-- ---------------------------------------------------------------- yo -->
+    <div class="ficha pf-cabeza ${cosFondo.css ? 'pf-conestilo' : ''}"
+         style="${cosFondo.css ? `background:${cosFondo.css}` : ''}">
+      ${V.puesto.fondo ? COS.escenaFondo(COS.pieza(V.puesto.fondo), { ancho: 520, alto: 140 }) : ''}
+      ${cosAura ? COS.dibujarAura(cosAura, { ancho: 520, alto: 140 }) : ''}
+      <button class="pf-avatar" id="pf-foto" aria-label="Cambiar la foto de perfil">
+        ${avatarHTML(perfil, urlFoto)}
+        ${cosMarco ? COS.dibujarMarco(cosMarco, { tam: 96 }) : ''}
+        <span class="pf-camara" aria-hidden="true">${icono('camara', 15)}</span>
+      </button>
+      <div class="pf-quien">
+        <!-- «Sin nombre» era el último sitio donde asomaba el bug de Carlos: si
+             te registraste con usuario pero sin nombre, la pantalla te llamaba
+             «Sin nombre» teniendo tu @ escrito justo debajo. Manda el nombre si
+             lo hay; si no, el usuario; y solo si no hay ninguno de los dos se
+             dice que falta. -->
+        <h2 class="pf-nombre"><span class="pf-nombre-placa ${cosPlaca.clase}"
+          style="${cosPlaca.css}" data-texto="${esc(perfil.nombre
+          || perfil.aliasVisible || perfil.alias || 'Sin nombre')}">${esc(perfil.nombre
+          || perfil.aliasVisible || perfil.alias || 'Sin nombre')}</span></h2>
+        ${cosTitulo ? COS.tituloHTML(cosTitulo, { etiqueta: 'div', clase: 'pf-titulo-cos' }) : ''}
+        ${perfil.alias && perfil.nombre
+          // Se ENSEÑA con sus mayúsculas y se BUSCA en minúsculas. Son dos usos
+          // del mismo dato y confundirlos es lo que hacía que escribir
+          // «CarlosPerez» se viera como «carlosperez».
+          ? `<div class="pf-alias">@${esc(perfil.aliasVisible || perfil.alias)}</div>` : ''}
+        <div class="pf-nivel">
+          <span class="pf-galon">${esc(c.veterania.nombre)}</span>
+          ${r.diasDesdeLaPrimera ? `<span>${r.diasDesdeLaPrimera} días con la app</span>` : ''}
+        </div>
+      </div>
+    </div>
+    ${perfil.bio ? `<p class="pf-bio">${esc(perfil.bio)}</p>` : ''}
+    <div class="pf-acciones">
+      <button class="boton boton-2" id="pf-editar">Editar perfil</button>
+      <button class="boton boton-2" id="pf-compartir-perfil">${icono('enviar', 17)} Compartir</button>
+    </div>
+
+    <!-- ---------------------------------------------------------- vestuario -->
+    <button class="ficha vest-entrada ${cajasPend && cajasPend.total ? 'tiene' : ''}" id="pf-vestuario">
+      <span class="vest-entrada-arte">${VEST.cajaSVG('entreno', 56, { animada: !!(cajasPend && cajasPend.total) })}
+        ${cajasPend && cajasPend.total ? `<span class="caja-pin">${cajasPend.total}</span>` : ''}</span>
+      <span class="vest-entrada-texto">
+        <b>Vestuario</b>
+        <small>${cajasPend && cajasPend.total
+          ? `${cajasPend.total} ${cajasPend.total === 1 ? 'caja sin abrir' : 'cajas sin abrir'}`
+          : `${CAJ.coleccion(V).mias} de ${CAJ.coleccion(V).total} piezas · ${VEST.numero(V.magnesio)} de magnesio`}</small>
+      </span>
+      <span class="vest-entrada-flecha" aria-hidden="true">${icono('derecha', 20)}</span>
+    </button>
+
+    <!-- ------------------------------------------------------------- racha -->
+    <div class="ficha pf-racha ${r.rachaViva ? 'pf-racha-viva' : ''}">
+      <div class="pf-racha-fila">
+        <span class="pf-llama ${r.rachaViva ? '' : 'pf-llama-apagada'}" aria-hidden="true">${icono('fuego', 32)}</span>
+        <div>
+          <div class="pf-racha-num cifra">${r.rachaDias || r.mejorRachaDias || 0}<small>días</small></div>
+          <div class="pf-racha-pie">${
+            !r.diasEntrenados
+              ? 'Apunta tu primera serie y empieza la racha'
+              : r.rachaViva
+                ? (r.diasParaRomper > 0
+                    ? `Racha viva. Te ${r.diasParaRomper === 1 ? 'queda 1 día' : `quedan ${r.diasParaRomper} días`} para no romperla.`
+                    : 'Hoy toca, o se rompe.')
+                : `Racha rota. La mejor fueron ${r.mejorRachaDias} días: vuelve a por ella.`
+          }</div>
+        </div>
+      </div>
+      <div class="pf-semanas">
+        <div class="pf-semanas-num"><b class="cifra">${r.rachaSemanas}</b> <span>semanas seguidas</span></div>
+        <div class="pf-semanas-pie">${r.diasEstaSemana} ${r.diasEstaSemana === 1 ? 'día' : 'días'}
+          esta semana · récord ${r.mejorRachaSemanas}</div>
+      </div>
+      <p class="campo-nota" style="margin-bottom:0">Una racha aguanta hasta ${PF.HUECO_MAX} días
+        de descanso: descansar no la rompe, desaparecer sí.</p>
+    </div>
+
+    <!-- ------------------------------------------------------------ cifras -->
+    <div class="ficha">
+      <div class="pf-cifras">
+        ${cifraHTML(r.diasEntrenados, 'días', 'Días distintos con al menos una serie apuntada')}
+        ${cifraHTML(r.seriesTotales, 'series')}
+        ${cifraHTML(r.prs, 'récords', 'Veces que has superado tu propia marca en una máquina')}
+        ${cifraHTML(redondear(r.volumenTon, 1), 'toneladas', 'Peso × repeticiones de todo lo que has levantado')}
+      </div>
+    </div>
+
+    <!-- -------------------------------------------------------------- gente -->
+    <h3 class="seccion-titulo">Gente</h3>
+    <div class="ficha">
+      <div class="pf-social">
+        <button class="pf-social-c" id="pf-ver-seguidores">
+          <b id="pf-n-seg">·</b><span>seguidores</span></button>
+        <button class="pf-social-c" id="pf-ver-siguiendo">
+          <b id="pf-n-sig">·</b><span>siguiendo</span></button>
+        <button class="pf-social-c" id="pf-ver-rutinas-pub">
+          <b id="pf-n-rut">·</b><span>rutinas</span></button>
+      </div>
+      <div class="botonera">
+        <button class="boton boton-2" id="pf-gente">${icono('gente', 17)} Buscar gente</button>
+        <button class="boton boton-2" id="pf-comunidad">${icono('carro', 17)} Rutinas de la gente</button>
+      </div>
+      <div id="pf-exclusivas"></div>
+    </div>
+
+    <!-- ---------------------------------------------------------- medallas -->
+    <h3 class="seccion-titulo">Medallas</h3>
+    <div class="ficha">
+      <div class="pf-titulo-fila">
+        <p class="campo-nota" style="margin:0">${c.medallasGanadas.length} de ${c.medallas.length}.
+          Elige hasta ${INS.MEDALLAS_EN_PERFIL} para lucirlas aquí.</p>
+        <button class="boton-plano" id="pf-elegir-medallas">Elegir</button>
+      </div>
+      <div class="pf-vitrina">
+        ${elegidas.length
+          ? elegidas.map((m) => `
+              <!-- Tocarla vuelve a poner la animación de cuando la sacaste.
+                   Carlos: «aún no he visto la animación, no sé cómo hacerla
+                   saltar» — y no se puede pedir que desbloquee una medalla
+                   para verla. Aquí está, a un toque, cuando quiera. -->
+              <button type="button" class="pf-pieza pf-pieza-toca" data-revivir="${esc(m.id)}"
+                      aria-label="Ver otra vez cómo se desbloqueó ${esc(m.nombre)}">
+                ${INS.dibujarMedalla(m, true, 60)}
+                <figcaption>${esc(m.nombre)}
+                  ${m.materialInfo
+                    ? `<span class="pf-material-nota ${m.materialInfo.clase === 'exotico'
+                        ? 'es-exotico' : ''}">${esc(INS.explicarMaterial(m.materialInfo))}</span>`
+                    : ''}</figcaption>
+              </button>`).join('')
+          : `<p class="grafica-vacia">${c.medallasGanadas.length
+              ? 'Todavía no has elegido cuáles enseñar.'
+              : 'Aún no tienes ninguna. Se ganan levantando en banca, sentadilla, peso muerto, militar, remo o hip thrust.'}</p>`}
+      </div>
+    </div>
+
+    <!-- --------------------------------------------------------- insignias -->
+    <h3 class="seccion-titulo">Insignias</h3>
+    <div class="ficha">
+      <div class="pf-titulo-fila">
+        <p class="campo-nota" style="margin:0">${c.ganadas.length} de ${c.insignias.length} conseguidas.</p>
+        <button class="boton-plano" id="pf-vitrina">Ver todas</button>
+      </div>
+      <div class="pf-vitrina">
+        ${escaparate.length
+          ? escaparate.map((i) => `
+              <figure class="pf-pieza">
+                ${INS.dibujarInsignia(i, true, 60)}
+                <figcaption>${esc(i.nombre)}</figcaption>
+              </figure>`).join('')
+          : '<p class="grafica-vacia">Ninguna todavía. La primera cae a los 5 días entrenados.</p>'}
+      </div>
+    </div>
+
+    <!-- ----------------------------------------------------------- rutinas -->
+    <h3 class="seccion-titulo">Mis rutinas</h3>
+    <div class="ficha">
+      <p class="campo-nota">Con sus series y sus repeticiones. Se comparte el plan, nunca tus pesos.</p>
+      ${conRutinas.length ? `<div class="lista">${conRutinas.map((x) => {
+        const pl = planDe(x);
+        return `
+        <div class="pf-fila">
+          <div class="pf-fila-texto">
+            <div class="pf-fila-nombre">${esc(x.nombre)}</div>
+            <div class="pf-fila-detalle">${pl.length} ${pl.length === 1 ? 'ejercicio' : 'ejercicios'} ·
+              ${pl.reduce((a, y) => a + y.series, 0)} series</div>
+          </div>
+          <button class="boton-plano pf-enviar" data-compartir-rutina="${x.id}"
+                  aria-label="Compartir la rutina ${esc(x.nombre)}">${icono('enviar', 19)}</button>
+        </div>`;
+      }).join('')}</div>` : '<p class="grafica-vacia">Todavía no tienes ningún día con máquinas.</p>'}
+    </div>
+
+    <!-- ------------------------------------------------------- anotaciones -->
+    <h3 class="seccion-titulo">Mis anotaciones</h3>
+    <div class="ficha">
+      <div class="pf-titulo-fila">
+        <p class="campo-nota" style="margin:0">Una lesión, una técnica, un objetivo.</p>
+        <button class="boton-plano" id="pf-nueva-nota">+ Añadir</button>
+      </div>
+      ${perfil.notas.length
+        ? `<div class="lista">${perfil.notas.map((n, i) => `
+            <div class="pf-fila">
+              <div class="pf-fila-texto pf-nota-texto">${esc(n.texto)}<span class="pf-nota-fecha">${esc(n.fecha || '')}</span></div>
+              <button class="boton-plano" data-borrar-nota="${i}" aria-label="Borrar esta anotación">${icono('papelera', 18)}</button>
+            </div>`).join('')}</div>`
+        : '<p class="grafica-vacia">Ninguna todavía.</p>'}
+    </div>
+
+    <!-- ------------------------------------------------------------ cuenta -->
+    <!-- LA PANTALLA PRINCIPAL YA NO ADMINISTRA NADA.  (1-sep-2026)
+         Carlos: «hay que pulir todo el apartado del perfil como si fuese una red
+         social de verdad; lo de publicar perfil no me gusta nada. Estaría bien
+         que en perfil hubiese una pestaña de configuración y allí tocas todo lo
+         de la privacidad, contraseña, seguridad, datos... Lo que sí se queda en
+         la pestaña principal es lo de editar perfil y tal».
+
+         Tenía razón y el motivo es de fondo: aquí había un botón «Publicar mi
+         perfil» del tamaño de un botón principal, o sea que la acción más
+         irreversible de la app —sacar tus datos a internet— estaba al lado de
+         «Editar perfil», que no compromete nada. En una red social de verdad la
+         privacidad vive en ajustes, se toca a propósito y se toca una vez.
+
+         Aquí se queda quién eres y qué has hecho. Todo lo demás, dentro. -->
+    <h3 class="seccion-titulo">Tu cuenta</h3>
+    <div class="ficha">
+      ${!hayNube
+        ? `<p class="campo-nota">Sin cuenta la app funciona ENTERA: apuntar, gráficas, plan,
+             metas y nutrición. La cuenta solo sirve para que tu perfil tenga una
+             dirección pública y para que los enlaces que mandes sean cortos.</p>
+           <button class="boton boton-2" id="pf-config-nube">${icono('nube', 17)} Configurar la nube</button>`
+        : conCuenta
+          ? `<p class="campo-nota">Dentro como <b>${esc(nube.usuario().email)}</b>.
+               Tu perfil está ${perfil.publico
+                 ? '<b>publicado</b>' : '<b>en privado</b>'}${
+                 perfil.publico ? '' : ' · nadie puede verlo'}.</p>
+             <div class="botonera">
+               <button class="boton boton-2" id="pf-config">${icono('rueda', 17)} Configuración</button>
+               <button class="boton boton-2" id="pf-salir">${icono('salir', 17)} Cerrar sesión</button>
+             </div>`
+          : `<p class="campo-nota">Entra o crea una cuenta para publicar tu perfil y mandar
+               enlaces cortos.</p>
+             <button class="boton" id="pf-entrar">Entrar o crear cuenta</button>`}
+    </div>
+
+    <!-- Solo sale si LA BASE dice que esta cuenta modera. Se pinta después,
+         cuando conteste, y con el número de cosas pendientes: una cola sin
+         número es una cola que no se abre. -->
+    <div class="botonera" id="pf-mod-fila" hidden style="margin-bottom:var(--e3)">
+      <button class="boton boton-2" id="pf-moderar">${icono('escudo', 17)} Moderación
+        <span class="chip-cola" id="pf-mod-n"></span></button>
+    </div>
+
+    <div class="botonera" style="margin-bottom:var(--e6)">
+      <button class="boton boton-2" id="pf-ajustes">${icono('rueda', 17)} Ajustes de la app</button>
+    </div>`;
+
+  /* ------------------------------------------------------------- enganches */
+  $('#pf-foto', raiz).onclick = () => cambiarFoto();
+  $('#pf-editar', raiz).onclick = () => abrirEditarPerfil();
+  $('#pf-compartir-perfil', raiz).onclick = () => compartirPerfil();
+  $('#pf-vitrina', raiz).onclick = () => abrirVitrina();
+  // Volver a ver cómo se desbloqueó una medalla que ya tienes.
+  $$('[data-revivir]', raiz).forEach((b) => (b.onclick = () => {
+    const m = c.medallasGanadas.find((x) => x.id === b.dataset.revivir);
+    if (m) celebrarMedalla(m, { nueva: true, material: m.material || 'hierro' });
+  }));
+  $('#pf-elegir-medallas', raiz).onclick = () => abrirElegirMedallas();
+  $('#pf-vestuario', raiz).onclick = () => { SON.toque(); irA('vestuario'); };
+  $('#pf-nueva-nota', raiz).onclick = () => abrirNota();
+  $('#pf-ajustes', raiz).onclick = () => irA('ajustes');
+  $('#pf-moderar', raiz).onclick = () => abrirModeracion();
+  ofrecerModeracion(raiz);
+  $('#pf-gente', raiz).onclick = () => abrirGente();
+  $('#pf-comunidad', raiz).onclick = () => abrirRutinasComunidad();
+  $('#pf-ver-seguidores', raiz).onclick = () => abrirListaDeGente(perfil.alias, 'seguidores');
+  $('#pf-ver-siguiendo', raiz).onclick = () => abrirListaDeGente(perfil.alias, 'siguiendo');
+  $('#pf-ver-rutinas-pub', raiz).onclick = () => abrirMisRutinasPublicadas();
+  cargarMisNumerosSociales(raiz);
+
+  $$('[data-borrar-nota]', raiz).forEach((b) => (b.onclick = async () => {
+    const i = Number(b.dataset.borrarNota);
+    const notas = perfilActual().notas.slice();
+    if (!await preguntar(`¿Borrar «${notas[i].texto.slice(0, 60)}»?`)) return;
+    notas.splice(i, 1);
+    await guardarPerfil({ notas });
+    pintar();
+  }));
+  $$('[data-compartir-rutina]', raiz).forEach((b) => (b.onclick = () =>
+    compartirRutina(b.dataset.compartirRutina)));
+
+  const bConfig = $('#pf-config-nube', raiz);
+  if (bConfig) bConfig.onclick = () => abrirConfigNube();
+  const bEntrar = $('#pf-entrar', raiz);
+  if (bEntrar) bEntrar.onclick = () => abrirCuenta();
+  const bSalir = $('#pf-salir', raiz);
+  if (bSalir) bSalir.onclick = () => cerrarSesion();
+  // Todo lo de administrar la cuenta se ha ido a la hoja de Configuración.
+  // Aquí solo queda la puerta.
+  const bAjustesPerfil = $('#pf-config', raiz);
+  if (bAjustesPerfil) bAjustesPerfil.onclick = () => abrirConfiguracion();
+}
+
+/* ==========================================================================
+ * CONFIGURACIÓN — privacidad, seguidores, mis rutinas, cuenta y datos
+ *
+ * Carlos, 1-sep-2026: *«estaría bien que en perfil hubiese una pestaña de
+ * configuración y allí tocas todo lo de la privacidad, contraseña, seguridad,
+ * datos etc.. lo que sí se queda en la pestaña principal es lo de editar perfil
+ * y tal»*. Y antes: *«lo de publicar perfil no me gusta nada»*.
+ *
+ * POR SECCIONES Y PLEGADAS, no todo a la vez. Aquí dentro conviven la cosa más
+ * inocente de la app (cambiar tu nombre) y la más irreversible (borrar la
+ * cuenta). Enseñarlas juntas en una lista es lo que hace que un día se toque la
+ * que no era. Cada sección se abre a propósito, y la de borrar va la última y
+ * en rojo.
+ * ========================================================================== */
+function abrirConfiguracion() {
+  const p = perfilActual();
+  hoja(
+    'Configuración',
+    `<div class="cfg">
+       <details class="cfg-bloque" open>
+         <summary>${icono('candado', 18)} Privacidad</summary>
+         <div class="cfg-cuerpo" id="cfg-privacidad"></div>
+       </details>
+       <details class="cfg-bloque">
+         <summary>${icono('gente', 18)} Quién te sigue</summary>
+         <div class="cfg-cuerpo" id="cfg-seguidores"><p class="grafica-vacia">Cargando…</p></div>
+       </details>
+       <details class="cfg-bloque">
+         <summary>${icono('lista', 18)} Tus rutinas publicadas</summary>
+         <div class="cfg-cuerpo" id="cfg-rutinas"><p class="grafica-vacia">Cargando…</p></div>
+       </details>
+       <details class="cfg-bloque">
+         <summary>${icono('nube', 18)} Copia de seguridad</summary>
+         <div class="cfg-cuerpo" id="cfg-copia"><p class="grafica-vacia">Cargando…</p></div>
+       </details>
+       <details class="cfg-bloque">
+         <summary>${icono('llave', 18)} Cuenta y seguridad</summary>
+         <div class="cfg-cuerpo" id="cfg-cuenta"></div>
+       </details>
+       <details class="cfg-bloque cfg-peligro">
+         <summary>${icono('aviso', 18)} Tus datos</summary>
+         <div class="cfg-cuerpo" id="cfg-datos"></div>
+       </details>
+     </div>`,
+    (cuerpo, cerrar) => {
+      const c = calculoPerfil();
+
+      /* ---------------------------------------------------------- privacidad */
+      const pintarPrivacidad = () => {
+        const perfil = perfilActual();
+        $('#cfg-privacidad', cuerpo).innerHTML = `
+          <div class="cfg-opcion">
+            <div class="cfg-opcion-texto">
+              <b>Perfil público</b>
+              <span>${perfil.publico
+                ? 'Cualquiera con tu enlace ve tu nombre, tus insignias y las medallas que hayas elegido.'
+                : 'Nadie te ve. No sales en las búsquedas ni tienes enlace que mandar.'}</span>
+            </div>
+            <button type="button" class="interruptor" id="cfg-publico"
+                    role="switch" aria-checked="${!!perfil.publico}"
+                    aria-label="Perfil público"><span></span></button>
+          </div>
+          <p class="campo-nota">Lo que NUNCA ve nadie, estés como estés: tus series, tu peso
+            corporal y lo que comes. Publicarte enseña tu nombre, tus insignias y tus medallas,
+            y nada más. Lo de entrenar solo va a <b>tu copia</b>, que solo abres tú.</p>
+          ${perfil.publico
+            ? `<button class="boton boton-2" id="cfg-actualizar">Actualizar lo publicado</button>
+               <p class="campo-nota">Tu perfil publicado es una foto del momento en que lo
+                 publicaste. Esto la vuelve a hacer con tus números de hoy.</p>` : ''}`;
+
+        $('#cfg-publico', cuerpo).onclick = async () => {
+          const perfilAhora = perfilActual();
+          if (perfilAhora.publico) {
+            if (!await preguntar('¿Quitar tu perfil de internet?\n\nDeja de verse para todo el mundo. '
+              + 'Puedes volver a publicarlo cuando quieras.')) return;
+            await guardarPerfil({ publico: 0 });
+            const r = await nube.publicarPerfil({
+              ...perfilActual(), publico: false, resumen: {}, insignias: [], medallas: [],
+            });
+            aviso(r.ok ? 'Tu perfil ya no se ve' : `No pude quitarlo: ${r.motivo}`, 3200);
+          } else {
+            await publicar(c);
+          }
+          pintarPrivacidad();
+          pintar();
+        };
+        const bAct = $('#cfg-actualizar', cuerpo);
+        if (bAct) bAct.onclick = () => publicar(c);
+      };
+      pintarPrivacidad();
+
+      /* ---------------------------------------------------------- la copia */
+      const pintarCopia = async () => {
+        const zona = $('#cfg-copia', cuerpo);
+        if (!nube.usuario()) {
+          zona.innerHTML = '<p class="grafica-vacia">Entra en tu cuenta para tener copia.</p>';
+          return;
+        }
+        const encendida = await copiaEncendida();
+        const info = await nube.infoCopia();
+        const mio = db.contarVolcado(await db.volcar());
+        const cuando = (info.ok && info.hay && info.actualizado)
+          ? new Date(info.actualizado).toLocaleString('es-ES', {
+            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+          : '';
+        zona.innerHTML = `
+          <div class="cfg-opcion">
+            <div class="cfg-opcion-texto">
+              <b>Guardar mis entrenos en la nube</b>
+              <span>${encendida
+                ? 'Se sube una vez al día. Si pierdes el móvil, entras en otro y vuelven.'
+                : 'Apagada. Si pierdes el móvil, pierdes lo apuntado.'}</span>
+            </div>
+            <button type="button" class="interruptor" id="cfg-copia-sw"
+                    role="switch" aria-checked="${encendida}"
+                    aria-label="Copia de seguridad"><span></span></button>
+          </div>
+          <p class="campo-nota">Solo la puedes leer tú: lo decide la base de datos, no la app.
+            No sale en tu perfil, ni para tus seguidores, ni en las clasificaciones. Van los
+            entrenos, las máquinas, la comida y el calendario; <b>las fotos no</b> (pesan
+            demasiado y se quedan en el móvil).</p>
+          <div class="fg-cifras">
+            <div><b>${mio.total}</b><span>apuntes aquí</span></div>
+            <div><b>${info.ok && info.hay ? (Number(info.filas) || 0) : 0}</b><span>en la copia</span></div>
+            <div><b>${info.ok && info.hay ? `${(Number(info.bytes) / 1048576).toFixed(2)} MB` : '—'}</b><span>ocupa</span></div>
+          </div>
+          <p class="campo-nota">${info.ok && info.hay
+            ? `Última copia: ${esc(cuando)}${info.aparato ? ` · desde ${esc(info.aparato)}` : ''}.`
+            : 'Todavía no hay ninguna copia.'}</p>
+          <div class="botonera">
+            <button class="boton boton-2" id="cfg-copiar">Copiar ahora</button>
+            <button class="boton boton-2" id="cfg-traer" ${info.ok && info.hay ? '' : 'disabled'}>Traer la copia</button>
+          </div>`;
+
+        $('#cfg-copia-sw', cuerpo).onclick = async () => {
+          const nueva = !(await copiaEncendida());
+          if (!nueva && !await preguntar('¿Apagar la copia?\n\nDejará de subirse. La que ya hay se queda '
+            + 'en la nube hasta que borres la cuenta.')) return;
+          await db.ponAjuste(CLAVE_COPIA_ACTIVA, nueva);
+          if (nueva) await copiaAutomatica({ forzar: true });
+          pintarCopia();
+        };
+        $('#cfg-copiar', cuerpo).onclick = async (e) => {
+          e.target.disabled = true;
+          const r = await copiaAutomatica({ forzar: true });
+          aviso(r.ok ? `Copia guardada: ${r.filas} apuntes` : `No pude: ${r.motivo}`, 3400);
+          pintarCopia();
+        };
+        $('#cfg-traer', cuerpo).onclick = async () => {
+          await ofrecerRestaurar();
+          pintarCopia();
+        };
+      };
+      pintarCopia();
+
+      /* --------------------------------------------------------- seguidores */
+      const pintarSeguidores = async () => {
+        const zona = $('#cfg-seguidores', cuerpo);
+        const r = await social.misSeguidores();
+        if (!r.ok) { zona.innerHTML = `<p class="grafica-vacia">${esc(r.motivo)}</p>`; return; }
+        if (!r.seguidores.length) {
+          zona.innerHTML = '<p class="grafica-vacia">Todavía no te sigue nadie.</p>';
+          return;
+        }
+        zona.innerHTML = `
+          <p class="campo-nota" style="margin-top:0">${r.seguidores.length}
+            ${r.seguidores.length === 1 ? 'persona te sigue' : 'personas te siguen'}.
+            Quitar a alguien es silencioso: no se le avisa.</p>
+          <div class="lista">${r.seguidores.map((x) => `
+            <div class="pf-fila">
+              <div class="pf-fila-texto">
+                <div class="pf-fila-nombre">${esc(x.alias_visible || x.alias)}</div>
+                <div class="pf-fila-sub">${esc(x.nombre || '')}${
+                  x.le_sigo ? ' · tú también le sigues' : ''}</div>
+              </div>
+              <button class="boton-plano cfg-quitar" data-id="${x.id}"
+                      data-alias="${esc(x.alias_visible || x.alias)}">Quitar</button>
+            </div>`).join('')}</div>`;
+        $$('.cfg-quitar', zona).forEach((b) => (b.onclick = async () => {
+          if (!await preguntar(`¿Quitar a ${b.dataset.alias} de tus seguidores?\n\n`
+            + 'Dejará de ver lo que publicas. No se le avisa, y puede volver a seguirte.')) return;
+          const r2 = await social.quitarSeguidor(b.dataset.id);
+          if (!r2.ok) return aviso(r2.motivo, 3200);
+          aviso('Quitado');
+          pintarSeguidores();
+        }));
+      };
+      pintarSeguidores();
+
+      /* ------------------------------------------------------- mis rutinas */
+      const pintarRutinas = async () => {
+        const zona = $('#cfg-rutinas', cuerpo);
+        const r = await social.misRutinas();
+        if (!r.ok) { zona.innerHTML = `<p class="grafica-vacia">${esc(r.motivo)}</p>`; return; }
+        if (!r.rutinas.length) {
+          zona.innerHTML = `<p class="grafica-vacia">No has publicado ninguna. Se publican desde
+            Plan, en la rutina que quieras compartir.</p>`;
+          return;
+        }
+        zona.innerHTML = `
+          <p class="campo-nota" style="margin-top:0"><b>Esconder</b> no es <b>borrar</b>:
+            escondida deja de verse y de poder copiarse, pero si te arrepientes mañana sigue
+            entera con sus me gusta. Borrar se lleva por delante los me gusta y los comentarios
+            de otra gente, y eso no tiene vuelta.</p>
+          <div class="lista">${r.rutinas.map((x) => `
+            <div class="pf-fila ${x.visible ? '' : 'cfg-escondida'}">
+              <div class="pf-fila-texto">
+                <div class="pf-fila-nombre">${esc(x.nombre)}${
+                  x.visible ? '' : ' <span class="fila-marca">escondida</span>'}</div>
+                <div class="pf-fila-sub">${x.dias} ${x.dias === 1 ? 'día' : 'días'} ·
+                  ${x.n_likes} me gusta · ${x.n_copias}
+                  ${x.n_copias === 1 ? 'copia' : 'copias'}</div>
+              </div>
+              <button class="boton-plano cfg-rut-editar" data-id="${x.id}"
+                      aria-label="Editar ${esc(x.nombre)}">${icono('lapiz', 18)}</button>
+            </div>`).join('')}</div>`;
+        $$('.cfg-rut-editar', zona).forEach((b) => (b.onclick = () => {
+          const x = r.rutinas.find((y) => y.id === b.dataset.id);
+          if (x) editarRutinaPublicada(x, pintarRutinas);
+        }));
+      };
+      pintarRutinas();
+
+      /* ----------------------------------------------------------- cuenta */
+      $('#cfg-cuenta', cuerpo).innerHTML = `
+        <p class="campo-nota" style="margin-top:0">Dentro como
+          <b>${esc((nube.usuario() || {}).email || '')}</b>.</p>
+        <div class="botonera">
+          <button class="boton boton-2" id="cfg-pass">Cambiar la contraseña</button>
+          <button class="boton boton-2" id="cfg-correo">Cambiar el correo</button>
+        </div>
+        <p class="campo-nota">La contraseña no la sabe ni la app ni yo: Supabase guarda solo
+          un resumen del que no se puede sacar, y viaja siempre cifrada. Por eso no hay ningún
+          sitio donde «verla»: solo se puede cambiar.</p>`;
+      $('#cfg-pass', cuerpo).onclick = () => hojaContrasenaNueva();
+      $('#cfg-correo', cuerpo).onclick = () => hojaCambiarCorreo();
+
+      /* ------------------------------------------------------------ datos */
+      $('#cfg-datos', cuerpo).innerHTML = `
+        <button class="boton boton-2" id="cfg-desactivar">Desactivar la cuenta</button>
+        <p class="campo-nota">Te esconde de las búsquedas, de los perfiles y de las
+          clasificaciones. Tus datos siguen y vuelves entrando otra vez.</p>
+        <div class="botonera">
+          <button class="boton boton-peligro" id="cfg-borrar">Borrar la cuenta para siempre</button>
+        </div>
+        <p class="campo-nota">Borrar se lleva tu perfil, tus rutinas publicadas, tus seguidores
+          y tus marcas de las clasificaciones. <b>Lo que tienes apuntado en este móvil no se
+          toca</b>: eso nunca ha estado en la nube.</p>`;
+      $('#cfg-desactivar', cuerpo).onclick = async () => {
+        if (!await preguntar('¿Desactivar tu cuenta?\n\nDejas de salir en búsquedas, perfiles y '
+          + 'clasificaciones. Vuelves entrando otra vez. Lo que tienes en el móvil no se toca.')) return;
+        const r = await nube.desactivarCuenta(true);
+        aviso(r.ok ? 'Cuenta desactivada. Entra otra vez cuando quieras' : r.motivo, 3400);
+        cerrar();
+        pintar();
+      };
+      $('#cfg-borrar', cuerpo).onclick = () => { cerrar(); hojaBorrarCuenta(); };
+    }
+  );
+}
+
+/** Cambiar el nombre, la descripción o si se ve una rutina que has publicado. */
+function editarRutinaPublicada(x, alTerminar) {
+  hoja(
+    'Tu rutina publicada',
+    `<div class="campo"><label for="er-nombre">Nombre</label>
+       <input type="text" id="er-nombre" maxlength="80" value="${esc(x.nombre)}"></div>
+     <div class="campo"><label for="er-desc">Descripción</label>
+       <textarea id="er-desc" rows="3" maxlength="600">${esc(x.descripcion || '')}</textarea></div>
+     <div class="cfg-opcion">
+       <div class="cfg-opcion-texto"><b>Se ve</b>
+         <span>Escondida, sale de las listas y no se puede copiar. Sus ${x.n_likes}
+           me gusta y sus ${x.n_copias} ${x.n_copias === 1 ? 'copia' : 'copias'} se quedan.</span>
+       </div>
+       <button type="button" class="interruptor" id="er-visible" role="switch"
+               aria-checked="${!!x.visible}" aria-label="Se ve"><span></span></button>
+     </div>
+     <button class="boton" id="er-guardar">Guardar</button>
+     <div class="botonera"><button class="boton boton-peligro" id="er-borrar">Borrarla</button></div>
+     <p class="campo-nota">Borrarla se lleva sus me gusta y los comentarios que le haya dejado
+       la gente. Si solo quieres dejar de enseñarla, escóndela: eso sí tiene vuelta.</p>`,
+    (cuerpo, cerrar) => {
+      let visible = !!x.visible;
+      const sw = $('#er-visible', cuerpo);
+      sw.onclick = () => {
+        visible = !visible;
+        sw.setAttribute('aria-checked', String(visible));
+      };
+      $('#er-guardar', cuerpo).onclick = async () => {
+        const nombre = $('#er-nombre', cuerpo).value.trim();
+        if (!nombre) return aviso('Ponle un nombre');
+        const r = await social.editarRutinaPublicada(x.id, {
+          nombre, descripcion: $('#er-desc', cuerpo).value.trim(), visible,
+        });
+        if (!r.ok) return aviso(r.motivo, 3200);
+        cerrar();
+        aviso('Guardada');
+        if (alTerminar) alTerminar();
+      };
+      $('#er-borrar', cuerpo).onclick = async () => {
+        if (!await preguntar(`¿Borrar «${x.nombre}» de la comunidad?\n\nSe lleva sus ${x.n_likes} `
+          + 'me gusta y sus comentarios. No tiene vuelta.')) return;
+        const r = await social.borrarRutinaPublicada(x.id);
+        if (!r.ok) return aviso(r.motivo, 3200);
+        cerrar();
+        aviso('Borrada');
+        if (alTerminar) alTerminar();
+      };
+    }
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * Editar
+ * ------------------------------------------------------------------------ */
+
+/**
+ * La foto.
+ *
+ * Se comprime a 512 px ANTES de guardarla. Una foto de móvil son 3-4 MB y aquí
+ * se ve a 76: guardarla entera llenaría IndexedDB para nada y tardaría un mundo
+ * en subir con los datos del móvil.
+ */
+async function cambiarFoto() {
+  const archivo = await pedirFoto({ camara: false });
+  if (!archivo) return;
+  const blob = await comprimir(archivo, 512, 0.82);
+  await db.guardarAvatar(blob, blob.type || 'image/jpeg');
+
+  // Si hay cuenta, sube también: si no, al abrir tu perfil desde otro móvil la
+  // foto no estaría. Y si falla la subida NO se deshace lo local — en el móvil
+  // ya la tiene, que es donde la mira el 99 % del tiempo.
+  if (nube.usuario()) {
+    const r = await nube.subirAvatar(blob);
+    if (r.ok) await guardarPerfil({ fotoUrl: r.url });
+    else aviso(`Foto guardada aquí, pero no pude subirla: ${r.motivo}`, 3200);
+  }
+  pintar();
+}
+
+function abrirEditarPerfil() {
+  const p = perfilActual();
+  let tocado = false;
+  hoja(
+    'Editar perfil',
+    `<div class="campo"><label for="pe-nombre">Cómo te llamas</label>
+       <input type="text" id="pe-nombre" maxlength="40" value="${esc(p.nombre)}" placeholder="Carlos"></div>
+     <div class="campo"><label for="pe-alias">Nombre de usuario</label>
+       <div class="cu-alias-caja">
+         <span class="cu-arroba" aria-hidden="true">@</span>
+         <input type="text" id="pe-alias" maxlength="20" value="${esc(p.aliasVisible)}" placeholder="Carlos"
+                autocapitalize="none" autocomplete="username" spellcheck="false">
+       </div>
+       <p class="campo-nota" id="pe-alias-pista">Es la dirección de tu perfil. Las mayúsculas se
+         respetan; lo que no cabe son espacios y signos, porque partirían el enlace.</p></div>
+     <div class="campo"><label for="pe-bio">Sobre ti</label>
+       <textarea id="pe-bio" rows="4" maxlength="300"
+                 placeholder="Empecé en 2024. Push/Pull/Leg. Voy a por los 100 en banca.">${esc(p.bio)}</textarea>
+       <p class="campo-nota"><span id="pe-cuenta">${p.bio.length}</span>/300</p></div>
+     <div class="barra-accion"><button class="boton" id="pe-guardar">Guardar</button></div>`,
+    (cuerpo, cerrar) => {
+      const iAlias = $('#pe-alias', cuerpo);
+      const iBio = $('#pe-bio', cuerpo);
+      $$('input,textarea', cuerpo).forEach((x) => (x.oninput = () => { tocado = true; }));
+      // ANTES SE COMÍA LAS MAYÚSCULAS MIENTRAS SE ESCRIBÍA. Carlos, 31-ago-2026:
+      // «tampoco se puede poner el nombre de usuario que quieras ni en
+      // mayúsculas ni con símbolos». Lo primero era un error nuestro y ya está:
+      // las mayúsculas se guardan y se enseñan, y la comparación va aparte, en
+      // minúsculas, para que no existan un «Ana» y un «ana» distintos.
+      //
+      // Lo segundo no se puede arreglar del todo y por eso se EXPLICA en vez de
+      // borrarlo a la brava: un espacio o una barra en el alias parten la URL
+      // del perfil. Los símbolos que sí caben en una URL (punto, guion y guion
+      // bajo) ahora entran.
+      const pista = $('#pe-alias-pista', cuerpo);
+      iAlias.oninput = () => {
+        tocado = true;
+        const problema = nube.quePasaConElAlias(iAlias.value);
+        pista.className = `campo-nota ${problema ? 'cu-mal' : ''}`;
+        pista.textContent = problema
+          || (iAlias.value.trim()
+            ? `Tu perfil será @${nube.normalizarAlias(iAlias.value)}`
+            : 'Es la dirección de tu perfil.');
+      };
+      iBio.oninput = () => {
+        tocado = true;
+        $('#pe-cuenta', cuerpo).textContent = String(iBio.value.length);
+      };
+
+      $('#pe-guardar', cuerpo).onclick = async () => {
+        const escrito = iAlias.value.trim();
+        if (escrito) {
+          const problema = nube.quePasaConElAlias(escrito);
+          if (problema) return aviso(problema, 3600);
+        }
+        await guardarPerfil({
+          nombre: $('#pe-nombre', cuerpo).value.trim(),
+          alias: nube.normalizarAlias(escrito),
+          aliasVisible: escrito,
+          bio: iBio.value.trim(),
+        });
+        tocado = false;
+        cerrar();
+        aviso('Perfil guardado');
+        pintar();
+      };
+    },
+    { hayTrabajo: () => tocado, avisoSalir: 'Vas a perder lo que has escrito.' }
+  );
+}
+
+function abrirNota() {
+  let tocado = false;
+  hoja(
+    'Nueva anotación',
+    `<div class="campo"><label for="pn-texto">Qué quieres recordar</label>
+       <textarea id="pn-texto" rows="4" maxlength="280"
+         placeholder="El hombro derecho se queja en press militar: bajar el peso y subir reps."></textarea></div>
+     <div class="barra-accion"><button class="boton" id="pn-guardar">Guardar</button></div>`,
+    (cuerpo, cerrar) => {
+      const t = $('#pn-texto', cuerpo);
+      t.oninput = () => { tocado = true; };
+      t.focus();
+      $('#pn-guardar', cuerpo).onclick = async () => {
+        const texto = t.value.trim();
+        if (!texto) return aviso('Escribe algo primero');
+        const notas = perfilActual().notas.slice();
+        // La más nueva arriba: es la que se va a mirar.
+        notas.unshift({ texto, fecha: new Date().toISOString().slice(0, 10) });
+        await guardarPerfil({ notas });
+        tocado = false;
+        cerrar();
+        pintar();
+      };
+    },
+    { hayTrabajo: () => tocado, avisoSalir: 'Vas a perder la anotación.' }
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * Vitrinas
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Todas las insignias, ganadas y por ganar.
+ *
+ * Las pendientes salen apagadas CON su pista y su anillo de progreso. Una
+ * vitrina donde solo se ven las conseguidas no dice a dónde ir, y las insignias
+ * sirven justamente para eso.
+ */
+function abrirVitrina() {
+  const c = calculoPerfil();
+  const porFamilia = new Map();
+  for (const i of c.insignias) {
+    if (!porFamilia.has(i.familia)) porFamilia.set(i.familia, []);
+    porFamilia.get(i.familia).push(i);
+  }
+
+  hoja(
+    `Insignias · ${c.ganadas.length} de ${c.insignias.length}`,
+    [...porFamilia.entries()].map(([familia, lista]) => `
+      <h4 class="pf-familia">${esc(INS.FAMILIAS[familia] || familia)}</h4>
+      <div class="pf-rejilla">
+        ${lista.map((i) => `
+          <figure class="pf-pieza pf-pieza-ancha">
+            ${INS.dibujarInsignia(i, i.ganada, 56, i.progreso)}
+            <figcaption>
+              <b>${esc(i.nombre)}</b>
+              <span>${i.ganada
+                ? `${esc(INS.METALES[i.nivel].nombre)} · conseguida`
+                : `${esc(i.pista)} · te ${i.falta === 1 ? 'falta' : 'faltan'} ${redondear(i.falta, 1)}`}</span>
+            </figcaption>
+          </figure>`).join('')}
+      </div>`).join(''),
+    () => {}
+  );
+}
+
+/**
+ * «¿Cuál de tus máquinas es el press de banca?»
+ *
+ * La salida de una medalla en estado `sin_maquina`. Se ofrecen primero las
+ * candidatas (las que comparten alguna palabra con el levantamiento) y debajo
+ * TODAS, porque una máquina puede llamarse «la del fondo» y no parecerse en
+ * nada al nombre del ejercicio.
+ *
+ * Se puede marcar más de una: el press de banca de Reus y el de Barcelona son
+ * dos máquinas distintas y las dos son press de banca. La medalla mira el mejor
+ * peso de todas ellas, que es lo que hace un hito absoluto.
+ */
+function elegirMaquinaDeLevantamiento(levId) {
+  const lev = INS.LEVANTAMIENTO_POR_ID.get(levId);
+  if (!lev) return;
+  const todas = S.cache.maquinas;
+  const candidatas = PF.candidatasA(levId, todas);
+  const idsCandidatas = new Set(candidatas.map((m) => m.id));
+  const resto = todas.filter((m) => !idsCandidatas.has(m.id));
+  const marcadas = new Set(todas.filter((m) => PF.levantamientoDe(m) === levId).map((m) => m.id));
+
+  const fila = (m) => `
+    <button class="pf-elegible fila-elegible" data-id="${m.id}"
+            aria-pressed="${marcadas.has(m.id)}">
+      <span class="fila-elegible-t">${esc(m.nombre)}</span>
+      <span class="fila-elegible-s">${esc((S.cache.gimnasios.find((g) => g.id === m.gimnasioId) || {}).nombre || '')}</span>
+    </button>`;
+
+  hoja(
+    `¿Cuál es tu ${lev.nombre.toLowerCase()}?`,
+    `
+    <p class="campo-nota" style="margin-top:0">Marca las máquinas que sean
+      <b>${esc(lev.nombre)}</b>. Solo se usa para las medallas de récord: tu progreso
+      sigue comparando cada máquina consigo misma.</p>
+    ${candidatas.length ? `<h4 class="pf-familia">Se parecen</h4>
+      <div class="lista-elegible">${candidatas.map(fila).join('')}</div>` : ''}
+    ${resto.length ? `<h4 class="pf-familia">Todas las demás</h4>
+      <div class="lista-elegible">${resto.map(fila).join('')}</div>` : ''}
+    ${todas.length ? '' : '<p class="grafica-vacia">Todavía no tienes máquinas.</p>'}
+    <button class="boton" id="lv-ok">Guardar</button>`,
+    (cuerpo, cerrar) => {
+      $$('.pf-elegible', cuerpo).forEach((b) => (b.onclick = () => {
+        const id = b.dataset.id;
+        if (marcadas.has(id)) marcadas.delete(id); else marcadas.add(id);
+        b.setAttribute('aria-pressed', marcadas.has(id));
+      }));
+
+      $('#lv-ok', cuerpo).onclick = async () => {
+        for (const m of todas) {
+          const antes = PF.levantamientoDe(m);
+          const ahora = marcadas.has(m.id);
+          if (ahora && antes === levId) continue;              // ya estaba bien
+          if (!ahora && antes !== levId) continue;             // no le tocaba
+          // Al DESMARCAR una que la regla sí reconocía hay que escribir '' a
+          // mano: borrar el campo devolvería el mando a la regla y volvería a
+          // marcarse sola en la siguiente pintada.
+          await db.guardar('maquinas', { ...m, levantamiento: ahora ? levId : '' });
+        }
+        await recargar();
+        cerrar();
+        aviso('Listo. Mira otra vez tus medallas');
+        pintar();
+        sync.sincronizar({ silencioso: true });
+      };
+    }
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * LOS MATERIALES, CONTADOS  (31-ago-2026)
+ *
+ * `perfil.js` devuelve DATOS («falta: {dias: 87}») y la frase se pone aquí.
+ * Es a propósito: JARVIS lo dirá a su manera y con los mismos números, y así no
+ * hay dos textos que puedan decir cosas distintas.
+ * ------------------------------------------------------------------------ */
+
+/** «Acero · la sacaste con un 12 % de margen». */
+function notaMaterial(m) {
+  const mat = m.materialInfo;
+  if (!mat) return '';
+  const h = mat.hoja || {};
+  const como =
+    mat.regla === 'margen' ? `le sacas un ${Math.round((h.margen - 1) * 100)} % al listón`
+    : mat.regla === 'gimnasios' ? `ese peso en ${h.gimnasios} gimnasios distintos`
+    : mat.regla === 'veterana' ? `un año con ella y la has vuelto a batir`
+    : mat.regla === 'dias' ? `${h.dias} días con ella`
+    : 'la tienes';
+  return `${INS.explicarMaterial(mat)} · ${como}`;
+}
+
+/** «Para el lapislázuli: 120 kg» — lo que le queda a una medalla que ya tienes. */
+function notaSiguienteMaterial(m, c) {
+  const s = PF.siguienteMaterial(m, c.resumen.historialLevantamientos, c.resumen.hoy);
+  if (!s) return 'El material más raro que hay. No queda nada por encima.';
+  const f = s.falta || {};
+  if (f.kg && !f.gimnasios) return `Para ${s.nombre.toLowerCase()}: ${redondear(f.kg, 1)} kg`;
+  if (f.gimnasios) {
+    return `Para ${s.nombre.toLowerCase()}: ${redondear(f.kg, 1)} kg en `
+      + `${f.gimnasios} gimnasio${f.gimnasios === 1 ? '' : 's'} más`;
+  }
+  if (f.batir) {
+    return f.dias
+      ? `Para ${s.nombre.toLowerCase()}: ${f.dias} días más, y volver a batirla`
+      : `Para ${s.nombre.toLowerCase()}: vuelve a batirla`;
+  }
+  if (f.dias) return `Para ${s.nombre.toLowerCase()}: ${f.dias} días más`;
+  return '';
+}
+
+/** La tabla de los seis, para que se sepa qué hay y cómo se saca cada uno. */
+function tablaDeMateriales() {
+  return `<details class="pf-materiales">
+    <summary>De qué están hechas las medallas</summary>
+    <p class="campo-nota">El nivel dice cuánto pesa el hito. El material dice CÓMO lo
+      sacaste, y se recalcula solo de tus series: no se guarda en ningún sitio.</p>
+    ${INS.MATERIALES.map((mat) => `
+      <div class="pf-material ${mat.clase === 'exotico' ? 'es-exotico' : ''}">
+        ${INS.dibujarMedalla({ nombre: mat.nombre, kg: 100, nivel: 2, material: mat.id }, true, 40)}
+        <span><b>${esc(mat.nombre)}</b>${mat.clase === 'exotico'
+          ? ' <span class="pf-exotico">exótico</span>' : ''}
+        <span>${esc(mat.pista)}</span></span>
+      </div>`).join('')}
+  </details>`;
+}
+
+/**
+ * Elegir qué medallas se lucen.
+ *
+ * Solo se pueden marcar las GANADAS. Dejar elegir una que no tienes sería dejar
+ * mentir en el perfil, y entonces las medallas de nadie valdrían nada.
+ */
+function abrirElegirMedallas() {
+  const c = calculoPerfil();
+  const p = perfilActual();
+  const elegidas = new Set(p.medallasElegidas.filter((id) =>
+    c.medallas.some((m) => m.id === id && m.ganada)));
+  let tocado = false;
+
+  const ganadas = c.medallas.filter((m) => m.ganada);
+  const resto = c.medallas.filter((m) => !m.ganada);
+
+  hoja(
+    'Elegir medallas',
+    `<p class="campo-nota">Hasta ${INS.MEDALLAS_EN_PERFIL} en tu perfil.
+       Solo se pueden lucir las que has conseguido.</p>
+     <div class="pf-rejilla" id="pm-ganadas"></div>
+     <h4 class="pf-familia">Por conseguir</h4>
+     <div class="pf-rejilla" id="pm-resto"></div>
+     ${tablaDeMateriales()}
+     <div class="barra-accion"><button class="boton" id="pm-guardar">Guardar</button></div>`,
+    (cuerpo, cerrar) => {
+      const zonaG = $('#pm-ganadas', cuerpo);
+      const boton = $('#pm-guardar', cuerpo);
+
+      const refrescar = () => {
+        boton.textContent = `Guardar (${elegidas.size} de ${INS.MEDALLAS_EN_PERFIL})`;
+      };
+
+      if (!ganadas.length) {
+        zonaG.innerHTML = `<p class="grafica-vacia">Todavía no tienes ninguna medalla.
+          Se ganan en banca, sentadilla, peso muerto, press militar, remo con barra
+          y hip thrust.</p>`;
+      }
+      for (const m of ganadas) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pf-pieza pf-pieza-ancha pf-elegible';
+        b.setAttribute('aria-pressed', elegidas.has(m.id));
+        b.innerHTML = `${INS.dibujarMedalla(m, true, 56)}
+          <span class="pf-pieza-texto"><b>${esc(m.nombre)}</b>
+          <span>${esc(INS.explicarMedalla(m))}</span>
+          <span class="pf-material-nota ${m.materialInfo && m.materialInfo.clase === 'exotico'
+            ? 'es-exotico' : ''}">${esc(notaMaterial(m))}</span>
+          <span class="pf-material-falta">${esc(notaSiguienteMaterial(m, c))}</span></span>`;
+        b.onclick = () => {
+          if (elegidas.has(m.id)) elegidas.delete(m.id);
+          else if (elegidas.size >= INS.MEDALLAS_EN_PERFIL) {
+            return aviso(`Solo caben ${INS.MEDALLAS_EN_PERFIL}. Quita una primero.`);
+          } else elegidas.add(m.id);
+          b.setAttribute('aria-pressed', elegidas.has(m.id));
+          tocado = true;
+          refrescar();
+        };
+        zonaG.appendChild(b);
+      }
+
+      // POR QUÉ UNA MEDALLA APAGADA TIENE QUE EXPLICARSE
+      // Carlos: «con algunas máquinas si cumples los requisitos no lo detecta».
+      // El fallo de fondo ya está arreglado (ver LEVANTAMIENTOS en insignias.js),
+      // pero queda la mitad visible: cuando la app no encuentra ninguna máquina
+      // que sea ese levantamiento, antes salía «pendiente, 0 %» —que se lee como
+      // «no levantas bastante»— en vez de «no sé cuál es tu press de banca».
+      // Ahora lo dice, y se arregla ahí mismo.
+      $('#pm-resto', cuerpo).innerHTML = resto.map((m) => `
+        <figure class="pf-pieza pf-pieza-ancha">
+          ${INS.dibujarMedalla(m, false, 56, m.progreso)}
+          <figcaption><b>${esc(m.nombre)}</b>
+            <span>${m.estado === 'sin_peso'
+              ? 'Apunta tu peso corporal para poder medirla'
+              : m.estado === 'sin_maquina'
+                ? `Ninguna de tus máquinas cuenta como ${esc(nombreLevantamiento(m.levantamiento))}`
+                : `${esc(INS.explicarMedalla(m))} · vas por ${redondear(m.mejorKg, 1)} kg`}</span>
+            ${m.estado === 'sin_maquina'
+              ? `<button class="boton-plano pm-asignar" data-lev="${m.levantamiento}">Decir cuál es</button>`
+              : m.estado === 'sin_peso'
+                // Igual que con la máquina: decir qué falta y arreglarlo ahí
+                // mismo. Una medalla apagada sin salida es una medalla rota.
+                ? '<button class="boton-plano pm-peso">Apuntar mi peso</button>'
+                : ''}</figcaption>
+        </figure>`).join('');
+
+      $$('.pm-asignar', cuerpo).forEach((b) => (b.onclick = () => {
+        cerrar();
+        elegirMaquinaDeLevantamiento(b.dataset.lev);
+      }));
+      $$('.pm-peso', cuerpo).forEach((b) => (b.onclick = () => { cerrar(); abrirPeso(); }));
+
+      boton.onclick = async () => {
+        await guardarPerfil({ medallasElegidas: [...elegidas] });
+        tocado = false;
+        cerrar();
+        pintar();
+      };
+      refrescar();
+    },
+    { hayTrabajo: () => tocado, avisoSalir: 'Vas a perder la selección.' }
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * La cuenta (Supabase)
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Dónde se pegan la dirección y la clave del proyecto.
+ *
+ * Se piden en la app y no van escritas en el código a propósito: el repositorio
+ * es público y, aunque la clave `anon` está pensada para ser pública, meter las
+ * credenciales de un proyecto concreto dentro del código obliga a recompilar el
+ * APK para cambiar de proyecto. Aquí se pegan una vez y ya está.
+ */
+function abrirConfigNube() {
+  let tocado = false;
+  hoja(
+    'Configurar la nube',
+    `<p class="campo-nota">Estos dos datos salen del panel de Supabase, en
+       <b>Project Settings → API</b>. Pega la <b>Project URL</b> y la clave
+       <b>anon / public</b> — nunca la <code>service_role</code>.</p>
+     <div class="campo"><label for="cn-url">Project URL</label>
+       <input type="url" id="cn-url" placeholder="https://xxxxxxxx.supabase.co"
+              autocapitalize="none" autocomplete="off" spellcheck="false"></div>
+     <div class="campo"><label for="cn-anon">Clave anon / public</label>
+       <input type="text" id="cn-anon" placeholder="eyJhbGciOi…"
+              autocapitalize="none" autocomplete="off" spellcheck="false"></div>
+     <div class="campo"><label for="cn-base">Dirección pública de la app (opcional)</label>
+       <input type="url" id="cn-base" placeholder="https://…"
+              autocapitalize="none" autocomplete="off" spellcheck="false">
+       <p class="campo-nota">Es la raíz de los enlaces que mandes. Si la dejas vacía
+         se usa la dirección desde la que abras la app, que dentro del APK no le
+         sirve a nadie de fuera.</p></div>
+     <div class="botonera" style="margin-top:0">
+       <button class="boton boton-2" id="cn-probar">Probar</button>
+       <button class="boton" id="cn-guardar">Guardar</button>
+     </div>
+     <p id="cn-estado" class="campo-nota"></p>`,
+    (cuerpo, cerrar) => {
+      const estado = $('#cn-estado', cuerpo);
+      $$('input', cuerpo).forEach((x) => (x.oninput = () => { tocado = true; }));
+
+      (async () => {
+        const c = await nube.configuracion();
+        $('#cn-url', cuerpo).value = c.url;
+        $('#cn-anon', cuerpo).value = c.anon;
+        $('#cn-base', cuerpo).value = (await db.ajuste('compartir_base', '')) || '';
+      })();
+
+      const aplicar = async () => {
+        await nube.configurar({
+          url: $('#cn-url', cuerpo).value,
+          anon: $('#cn-anon', cuerpo).value,
+        });
+        await comp.fijarBase($('#cn-base', cuerpo).value);
+      };
+
+      $('#cn-probar', cuerpo).onclick = async () => {
+        await aplicar();
+        estado.textContent = 'Probando…';
+        const r = await nube.probar();
+        estado.innerHTML = r.ok
+          ? '<span class="estado-sync ok">La nube contesta y los DOS esquemas están puestos</span>'
+          : `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+      };
+      $('#cn-guardar', cuerpo).onclick = async () => {
+        await aplicar();
+        tocado = false;
+        cerrar();
+        aviso('Nube configurada');
+        pintar();
+      };
+    },
+    { hayTrabajo: () => tocado, avisoSalir: 'Vas a perder lo que has pegado.' }
+  );
+}
+
+/**
+ * «Ya está: ahora ve a tu correo.»
+ *
+ * Sustituye al formulario en cuanto la cuenta se crea. Tres cosas y ninguna
+ * sobra: qué ha pasado, qué tiene que hacer ahora, y la salida por si el correo
+ * no llega — que es el caso que antes dejaba a la gente encerrada, porque
+ * volver a registrarse falla con «ese correo ya tiene cuenta».
+ */
+function pantallaRevisaElCorreo(cuerpo, cerrar, email) {
+  cuerpo.innerHTML = `
+    <div class="cu-hecho">
+      <span class="cu-hecho-icono" aria-hidden="true">${icono('enviar', 30)}</span>
+      <h3 class="cu-hecho-t">Cuenta creada</h3>
+      <p class="cu-hecho-s">Te hemos mandado un correo a <b>${esc(email)}</b>.
+        Ábrelo y pulsa el enlace para confirmarla.</p>
+    </div>
+    <ol class="cu-pasos">
+      <li>Abre tu correo (mira también en <b>spam</b>).</li>
+      <li>Pulsa el enlace. Se abrirá <b>el navegador</b>, no esta app: es normal.</li>
+      <li>Vuelve aquí y entra con tu correo y tu contraseña.</li>
+    </ol>
+    <button class="boton" id="cu-hecho-entrar">Ya lo he confirmado, entrar</button>
+    <button class="boton-plano" id="cu-hecho-reenviar" style="width:100%;margin-top:10px">
+      No me ha llegado el correo</button>
+    <p id="cu-hecho-estado" class="campo-nota" aria-live="polite"></p>`;
+
+  const estado = $('#cu-hecho-estado', cuerpo);
+  $('#cu-hecho-entrar', cuerpo).onclick = () => {
+    cerrar();
+    abrirCuenta({ modoInicial: 'entrar' });
+  };
+  $('#cu-hecho-reenviar', cuerpo).onclick = async (e) => {
+    e.target.disabled = true;
+    const r = await nube.reenviarConfirmacion(email);
+    e.target.disabled = false;
+    estado.innerHTML = r.ok
+      ? `<span class="estado-sync ok">Mandado otra vez a ${esc(email)}.</span>`
+      : `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+  };
+}
+
+/** Cambiar el correo. Supabase manda una confirmación al nuevo. */
+function hojaCambiarCorreo() {
+  hoja(
+    'Cambiar el correo',
+    `<p class="campo-nota" style="margin-top:0">Ahora entras con
+       <b>${esc((nube.usuario() || {}).email || '')}</b>. Te mandaremos un correo al nuevo para
+       confirmar que es tuyo; hasta que lo abras, sigues entrando con el de siempre.</p>
+     <div class="campo"><label for="cc-email">Correo nuevo</label>
+       <input type="email" id="cc-email" autocomplete="email" inputmode="email"
+              autocapitalize="none" spellcheck="false" placeholder="elnuevo@ejemplo.com"></div>
+     <button class="boton" id="cc-ir">Mandar la confirmación</button>
+     <p id="cc-estado" class="campo-nota" aria-live="polite"></p>`,
+    (cuerpo) => {
+      const estado = $('#cc-estado', cuerpo);
+      $('#cc-ir', cuerpo).onclick = async () => {
+        const email = $('#cc-email', cuerpo).value.trim();
+        if (!email) return aviso('Escribe el correo nuevo');
+        const r = await nube.cambiarCorreo(email);
+        estado.innerHTML = r.ok
+          ? `<span class="estado-sync ok">Mandado a ${esc(email)}. Ábrelo para terminar.</span>`
+          : `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+      };
+    }
+  );
+}
+
+/**
+ * Borrar la cuenta. La única pantalla de la app con fricción a propósito.
+ *
+ * Hay que escribir el nombre de usuario. No es por gusto: un botón rojo se
+ * pulsa sin querer con el móvil en el bolsillo del pantalón corto, y esto no
+ * tiene vuelta. Lo que NO se borra —lo apuntado en el móvil— se dice antes de
+ * pulsar, no después.
+ */
+function hojaBorrarCuenta() {
+  const alias = perfilActual().aliasVisible || perfilActual().alias || '';
+  hoja(
+    'Borrar la cuenta',
+    `<p class="campo-nota" style="margin-top:0">Esto <b>no se puede deshacer</b>. Se va:</p>
+     <ul class="bv-lista">
+       <li>tu perfil público y tu foto</li>
+       <li>las rutinas que hayas publicado, con sus me gusta y comentarios</li>
+       <li>tus seguidores y a quién sigues</li>
+       <li>tus marcas en las clasificaciones de los gimnasios</li>
+     </ul>
+     <p class="campo-nota"><b>Lo que tienes apuntado en este móvil no se toca</b>: series,
+       pesos, máquinas, fotos y comida nunca han salido de aquí. La app te sigue funcionando
+       entera sin cuenta.</p>
+     <div class="campo"><label for="bc-alias">Escribe <b>${esc(alias || 'tu nombre de usuario')}</b> para confirmar</label>
+       <input type="text" id="bc-alias" autocapitalize="none" autocomplete="off" spellcheck="false"></div>
+     <button class="boton boton-peligro" id="bc-ir" disabled>Borrar mi cuenta</button>
+     <p id="bc-estado" class="campo-nota" aria-live="polite"></p>`,
+    (cuerpo, cerrar) => {
+      const caja = $('#bc-alias', cuerpo);
+      const boton = $('#bc-ir', cuerpo);
+      const estado = $('#bc-estado', cuerpo);
+      caja.oninput = () => {
+        boton.disabled = caja.value.trim().toLowerCase() !== String(alias).toLowerCase() || !alias;
+      };
+      boton.onclick = async () => {
+        boton.disabled = true;
+        estado.textContent = 'Borrando…';
+        const r = await nube.borrarCuenta();
+        if (!r.ok) {
+          boton.disabled = false;
+          estado.innerHTML = `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+          return;
+        }
+        // El perfil LOCAL se queda: es suyo y vive en su móvil. Lo que se borra
+        // es la cuenta de la nube. Borrarle también lo local sería tomar por él
+        // una decisión que no ha pedido.
+        await guardarPerfil({ publico: 0 });
+        cerrar();
+        aviso('Cuenta borrada. La app sigue funcionando entera', 3600);
+        pintar();
+      };
+    }
+  );
+}
+
+/**
+ * Entrar o registrarse, en la misma hoja.
+ *
+ * REHECHA EL 31-AGO-2026. Carlos: *«la creación de usuario está súper mal, va
+ * fatal y no te deja confirmar el correo, tampoco se puede poner el nombre de
+ * usuario que quieras ni en mayúsculas ni con símbolos ni poder recuperar tu
+ * cuenta»*. Eran cuatro cosas distintas y ninguna era una opinión:
+ *
+ *  1. EL CORREO NO SE PODÍA CONFIRMAR. El enlace de Supabase volvía a la «Site
+ *     URL» del panel —de fábrica, `localhost:3000`— y, aunque volviera aquí, la
+ *     app se comía el testigo al reescribir el `#` en la primera pintada. Las
+ *     dos mitades arregladas: `nube.dondeVuelve()` y la lectura en `arrancar()`.
+ *     Y ahora, además, se puede pedir otro correo: sin eso, uno que se pierde en
+ *     spam era un callejón sin salida, porque volver a registrarse falla con
+ *     «ese correo ya tiene cuenta».
+ *  2. EL NOMBRE. Se pedía un «alias» y se le quitaban las mayúsculas delante de
+ *     tus ojos. Ahora son DOS campos: el nombre es libre del todo y el nombre de
+ *     usuario guarda las mayúsculas que escribas (se compara en minúsculas para
+ *     que no haya un «Ana» y un «ana» distintos). Lo que no puede llevar son
+ *     espacios ni signos raros, y no es un capricho: es tu dirección.
+ *  3. RECUPERAR. Estaba el botón que manda el correo, pero no la pantalla para
+ *     escribir la contraseña nueva al volver. O sea, no estaba.
+ *  4. LA CONTRASEÑA. Seis caracteres y a correr. Ahora se mide y se dice.
+ *
+ * Sigue siendo UNA hoja con dos pestañas: dos pantallas separadas obligan a
+ * acertar a la primera cuál es la tuya, y quien no se acuerda de si tenía
+ * cuenta acaba en la equivocada.
+ */
+function abrirCuenta({ modoInicial = 'entrar' } = {}) {
+  let modo = modoInicial;
+  let tocado = false;
+  let relojAlias = null;
+
+  hoja(
+    'Tu cuenta',
+    `<div class="chips" role="tablist">
+       <button class="chip" data-modo="entrar" role="tab">Entrar</button>
+       <button class="chip" data-modo="registro" role="tab">Crear cuenta</button>
+     </div>
+
+     <div class="campo oculto" id="cu-zona-nombre"><label for="cu-nombre">Tu nombre</label>
+       <input type="text" id="cu-nombre" maxlength="60" autocomplete="name"
+              placeholder="Como quieras que te vean">
+       <p class="campo-nota">Aquí cabe todo: mayúsculas, acentos, espacios y signos.</p></div>
+
+     <div class="campo oculto" id="cu-zona-alias"><label for="cu-alias">Nombre de usuario</label>
+       <div class="cu-alias-caja">
+         <span class="cu-arroba" aria-hidden="true">@</span>
+         <input type="text" id="cu-alias" maxlength="20" autocapitalize="none"
+                autocomplete="username" spellcheck="false" placeholder="TuNombre">
+       </div>
+       <p class="campo-nota" id="cu-alias-pista">Es la dirección de tu perfil, la que compartes.</p></div>
+
+     <div class="campo"><label for="cu-email">Correo</label>
+       <input type="email" id="cu-email" autocomplete="email" inputmode="email"
+              autocapitalize="none" spellcheck="false" placeholder="tucorreo@ejemplo.com"></div>
+
+     <div class="campo"><label for="cu-pass">Contraseña</label>
+       <div class="cu-pass-caja">
+         <input type="password" id="cu-pass" autocomplete="current-password" placeholder="Tu contraseña">
+         <button type="button" class="boton-plano cu-ojo" id="cu-ver" aria-pressed="false">Ver</button>
+       </div>
+       <div class="cu-fuerza oculto" id="cu-fuerza" aria-live="polite">
+         <div class="cu-barra"><span></span></div>
+         <p class="campo-nota" id="cu-fuerza-t"></p>
+       </div></div>
+
+     <button class="boton" id="cu-ir">Entrar</button>
+     <button class="boton-plano" id="cu-olvide" style="width:100%;margin-top:10px">
+       He olvidado la contraseña</button>
+     <button class="boton-plano oculto" id="cu-reenviar" style="width:100%;margin-top:2px">
+       No me ha llegado el correo</button>
+     <p id="cu-estado" class="campo-nota" aria-live="polite"></p>
+
+     <p class="campo-nota cu-legal">Tu contraseña no se guarda aquí ni viaja en claro: va cifrada
+       por la red y en el servidor se guarda un resumen del que no se puede sacar de vuelta.
+       Lo que apuntas entrenando —series, pesos y comida— sube a <b>tu copia de seguridad</b>,
+       que <b>solo puedes leer tú</b>: no sale en ningún perfil, ni en las clasificaciones, ni
+       para tus seguidores. Se puede apagar en Perfil › Configuración.</p>`,
+    (cuerpo, cerrar) => {
+      const estado = $('#cu-estado', cuerpo);
+      const boton = $('#cu-ir', cuerpo);
+      const zonaAlias = $('#cu-zona-alias', cuerpo);
+      const zonaNombre = $('#cu-zona-nombre', cuerpo);
+      const iAlias = $('#cu-alias', cuerpo);
+      const iNombre = $('#cu-nombre', cuerpo);
+      const iPass = $('#cu-pass', cuerpo);
+      const iEmail = $('#cu-email', cuerpo);
+      const pista = $('#cu-alias-pista', cuerpo);
+      const zonaFuerza = $('#cu-fuerza', cuerpo);
+      const bReenviar = $('#cu-reenviar', cuerpo);
+
+      const p = perfilActual();
+      iAlias.value = p.aliasVisible || p.alias || '';
+      iNombre.value = p.nombre || '';
+
+      const ponModo = (m) => {
+        modo = m;
+        $$('[data-modo]', cuerpo).forEach((x) => x.setAttribute('aria-pressed', x.dataset.modo === m));
+        zonaAlias.classList.toggle('oculto', m !== 'registro');
+        zonaNombre.classList.toggle('oculto', m !== 'registro');
+        zonaFuerza.classList.toggle('oculto', m !== 'registro');
+        boton.textContent = m === 'entrar' ? 'Entrar' : 'Crear la cuenta';
+        iPass.setAttribute('autocomplete', m === 'entrar' ? 'current-password' : 'new-password');
+        estado.textContent = '';
+        bReenviar.classList.add('oculto');
+      };
+      $$('[data-modo]', cuerpo).forEach((b) => (b.onclick = () => ponModo(b.dataset.modo)));
+      $$('input', cuerpo).forEach((x) => (x.oninput = () => { tocado = true; }));
+
+      $('#cu-ver', cuerpo).onclick = (e) => {
+        const ver = iPass.type === 'password';
+        iPass.type = ver ? 'text' : 'password';
+        e.target.setAttribute('aria-pressed', String(ver));
+        e.target.textContent = ver ? 'Ocultar' : 'Ver';
+      };
+
+      // El nombre propone el nombre de usuario, pero solo mientras no se haya
+      // tocado a mano: si alguien escribe su usuario y luego corrige el nombre,
+      // pisárselo sería robarle lo que acaba de escribir.
+      let aliasTocado = false;
+      iNombre.addEventListener('input', () => {
+        if (aliasTocado || !iNombre.value.trim()) return;
+        iAlias.value = nube.aliasDesdeNombre(iNombre.value);
+        comprobarAlias();
+      });
+
+      function comprobarAlias() {
+        clearTimeout(relojAlias);
+        const problema = nube.quePasaConElAlias(iAlias.value);
+        if (problema) {
+          pista.className = 'campo-nota cu-mal';
+          pista.textContent = problema;
+          return;
+        }
+        pista.className = 'campo-nota';
+        pista.textContent = 'Comprobando si está libre…';
+        relojAlias = setTimeout(async () => {
+          const r = await nube.aliasLibre(nube.normalizarAlias(iAlias.value));
+          if (!r.ok) {
+            pista.className = 'campo-nota';
+            pista.textContent = 'Es la dirección de tu perfil, la que compartes.';
+            return;
+          }
+          pista.className = `campo-nota ${r.libre ? 'cu-bien' : 'cu-mal'}`;
+          pista.textContent = r.libre
+            ? `Libre. Tu perfil será @${nube.normalizarAlias(iAlias.value)}`
+            : 'Ese ya lo tiene otra persona. Prueba con otro';
+        }, 420);
+      }
+
+      iAlias.oninput = () => { tocado = true; aliasTocado = true; comprobarAlias(); };
+
+      iPass.addEventListener('input', () => {
+        if (modo !== 'registro') return;
+        const f = nube.fuerzaContrasena(iPass.value, [iEmail.value, iAlias.value]);
+        const barra = $('.cu-barra span', cuerpo);
+        barra.style.width = `${[8, 40, 72, 100][f.nivel]}%`;
+        barra.dataset.nivel = String(f.nivel);
+        $('#cu-fuerza-t', cuerpo).textContent = iPass.value ? f.texto : '';
+      });
+
+      // «No me ha llegado» se ofrece SOLO después de haber creado la cuenta o
+      // de haber fallado por falta de confirmación. Antes de eso es ruido.
+      bReenviar.onclick = async () => {
+        const email = iEmail.value.trim();
+        if (!email) return aviso('Escribe primero tu correo');
+        bReenviar.disabled = true;
+        const r = await nube.reenviarConfirmacion(email);
+        bReenviar.disabled = false;
+        estado.innerHTML = r.ok
+          ? `<span class="estado-sync ok">Mandado otra vez a ${esc(email)}. Mira también en spam.</span>`
+          : `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+      };
+
+      boton.onclick = async () => {
+        const email = iEmail.value.trim();
+        const password = iPass.value;
+        if (!email || !password) return aviso('Faltan el correo o la contraseña');
+
+        boton.disabled = true;
+        estado.textContent = modo === 'entrar' ? 'Entrando…' : 'Creando la cuenta…';
+
+        let r;
+        if (modo === 'entrar') {
+          r = await nube.entrar({ email, password });
+        } else {
+          const problema = nube.quePasaConElAlias(iAlias.value);
+          if (problema) {
+            boton.disabled = false;
+            estado.innerHTML = `<span class="estado-sync pendiente">${esc(problema)}</span>`;
+            return;
+          }
+          // Se comprueba ANTES de crear la cuenta: descubrir que el nombre de
+          // usuario está cogido después deja media cuenta hecha y un mensaje
+          // que no se entiende.
+          const libre = await nube.aliasLibre(nube.normalizarAlias(iAlias.value));
+          if (libre.ok && !libre.libre) {
+            boton.disabled = false;
+            estado.innerHTML = '<span class="estado-sync pendiente">Ese nombre de usuario ya lo tiene otra persona</span>';
+            return;
+          }
+          r = await nube.registrar({
+            email, password, alias: iAlias.value.trim(), nombre: iNombre.value.trim(),
+          });
+        }
+
+        boton.disabled = false;
+        if (!r.ok) {
+          estado.innerHTML = `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+          // Si lo que falta es confirmar, la salida se ofrece AQUÍ mismo.
+          if (/confirmar/i.test(r.motivo)) bReenviar.classList.remove('oculto');
+          return;
+        }
+        if (r.confirmar) {
+          // EL NOMBRE SE GUARDA AQUÍ TAMBIÉN. Antes solo se guardaba en la rama
+          // de «cuenta creada y dentro»: si Supabase pedía confirmar el correo
+          // —que es lo normal—, el nombre y el usuario que acababas de escribir
+          // se perdían, y la app te los volvía a pedir en la pantalla siguiente.
+          // Ese era, literalmente, el «te hace volver a meter el nombre, el
+          // usuario» de Carlos, visto desde el otro lado.
+          if (modo === 'registro') {
+            await guardarPerfil({
+              alias: nube.normalizarAlias(iAlias.value),
+              aliasVisible: iAlias.value.trim(),
+              ...(iNombre.value.trim() ? { nombre: iNombre.value.trim() } : {}),
+            });
+          }
+          // LA PANTALLA CAMBIA ENTERA. Carlos, 31-ago-2026: «le das a crear
+          // cuenta y te sale un mensaje de cuenta creada pero se queda en el
+          // apartado de crear cuenta». Tenía razón: dejar el formulario debajo
+          // de un mensaje de éxito se lee como que se ha colgado. Lo que ha
+          // pasado es un cambio de estado, así que la pantalla tiene que
+          // cambiar de estado.
+          tocado = false;
+          pantallaRevisaElCorreo(cuerpo, cerrar, email);
+          return;
+        }
+        if (modo === 'registro') {
+          await guardarPerfil({
+            alias: nube.normalizarAlias(iAlias.value),
+            aliasVisible: iAlias.value.trim(),
+            ...(iNombre.value.trim() ? { nombre: iNombre.value.trim() } : {}),
+          });
+        }
+        tocado = false;
+        cerrar();
+        // AQUÍ pasa todo lo que hace que entrar signifique algo: el perfil baja
+        // de la nube, los datos se quedan con dueño, y si hay copia se ofrece.
+        await trasEntrar();
+        // Si la puerta estaba puesta, esto la quita y arranca la app detrás.
+        if (_cerrarPuerta && nube.usuario()) {
+          const seguir = _cerrarPuerta;
+          _cerrarPuerta = null;
+          await seguir();
+          return;
+        }
+        aviso('Dentro');
+        pintar();
+      };
+
+      $('#cu-olvide', cuerpo).onclick = async () => {
+        const email = iEmail.value.trim();
+        if (!email) return aviso('Escribe primero tu correo');
+        const r = await nube.recuperarContrasena(email);
+        estado.innerHTML = r.ok
+          ? `<span class="estado-sync ok">Te hemos mandado un correo a ${esc(email)}.
+             Ábrelo y podrás poner una contraseña nueva.</span>`
+          : `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+      };
+
+      ponModo(modo);
+      if (modo === 'registro') comprobarAlias();
+    },
+    { hayTrabajo: () => tocado, avisoSalir: 'Vas a perder lo que has escrito.' }
+  );
+}
+
+/**
+ * «Ese enlace ha caducado» — con la salida, no sin ella.
+ *
+ * Un enlace de confirmación caducado dejaba una pantalla que no decía nada y
+ * una cuenta a medias que además impedía volver a registrarse. Aquí se pide el
+ * correo y se manda otro.
+ */
+function hojaReenviar(titulo, texto) {
+  hoja(
+    titulo,
+    `<p class="campo-nota" style="margin-top:0">${esc(texto)}</p>
+     <div class="campo"><label for="rv-email">Tu correo</label>
+       <input type="email" id="rv-email" autocomplete="email" inputmode="email"
+              autocapitalize="none" spellcheck="false" placeholder="tucorreo@ejemplo.com"></div>
+     <button class="boton" id="rv-ir">Mandarme otro correo</button>
+     <p id="rv-estado" class="campo-nota" aria-live="polite"></p>`,
+    (cuerpo) => {
+      const estado = $('#rv-estado', cuerpo);
+      $('#rv-ir', cuerpo).onclick = async () => {
+        const email = $('#rv-email', cuerpo).value.trim();
+        if (!email) return aviso('Escribe tu correo');
+        const r = await nube.reenviarConfirmacion(email);
+        estado.innerHTML = r.ok
+          ? `<span class="estado-sync ok">Mandado a ${esc(email)}. Mira también en spam.</span>`
+          : `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+      };
+    }
+  );
+}
+
+/**
+ * La contraseña nueva, al volver del correo de recuperación.
+ *
+ * Esta pantalla es la que faltaba entera: había botón para pedir el correo, y
+ * al pulsar el enlace no había dónde escribir la contraseña. O sea, recuperar
+ * la cuenta no existía.
+ */
+function hojaContrasenaNueva() {
+  let tocado = false;
+  hoja(
+    'Pon una contraseña nueva',
+    `<p class="campo-nota" style="margin-top:0">Ya estás dentro. Elige la contraseña con la que
+       vas a entrar a partir de ahora.</p>
+     <div class="campo"><label for="cn2-pass">Contraseña nueva</label>
+       <div class="cu-pass-caja">
+         <input type="password" id="cn2-pass" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+         <button type="button" class="boton-plano cu-ojo" id="cn2-ver" aria-pressed="false">Ver</button>
+       </div>
+       <div class="cu-fuerza" id="cn2-fuerza" aria-live="polite">
+         <div class="cu-barra"><span></span></div>
+         <p class="campo-nota" id="cn2-fuerza-t"></p>
+       </div></div>
+     <button class="boton" id="cn2-ir">Guardar la contraseña</button>
+     <p id="cn2-estado" class="campo-nota" aria-live="polite"></p>`,
+    (cuerpo, cerrar) => {
+      const iPass = $('#cn2-pass', cuerpo);
+      const estado = $('#cn2-estado', cuerpo);
+      iPass.oninput = () => {
+        tocado = true;
+        const f = nube.fuerzaContrasena(iPass.value, [(nube.usuario() || {}).email]);
+        const barra = $('.cu-barra span', cuerpo);
+        barra.style.width = `${[8, 40, 72, 100][f.nivel]}%`;
+        barra.dataset.nivel = String(f.nivel);
+        $('#cn2-fuerza-t', cuerpo).textContent = iPass.value ? f.texto : '';
+      };
+      $('#cn2-ver', cuerpo).onclick = (e) => {
+        const ver = iPass.type === 'password';
+        iPass.type = ver ? 'text' : 'password';
+        e.target.setAttribute('aria-pressed', String(ver));
+        e.target.textContent = ver ? 'Ocultar' : 'Ver';
+      };
+      $('#cn2-ir', cuerpo).onclick = async () => {
+        const r = await nube.cambiarContrasena(iPass.value);
+        if (!r.ok) {
+          estado.innerHTML = `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+          return;
+        }
+        tocado = false;
+        cerrar();
+        aviso('Contraseña cambiada');
+        pintar();
+      };
+    },
+    { hayTrabajo: () => tocado, avisoSalir: 'No habrás cambiado la contraseña.' }
+  );
+}
+
+/**
+ * Sube el perfil a internet.
+ *
+ * Sube el RESUMEN ya calculado, las insignias ganadas y las medallas elegidas.
+ * Nunca las series: los kilos de cada día son suyos y no le interesan a nadie
+ * más, y subirlos convertiría un perfil público en un diario público.
+ */
+async function publicar(calculo) {
+  const p = perfilActual();
+  if (!p.alias) {
+    aviso('Antes ponte un alias en «Editar perfil»: es la dirección de tu perfil', 3200);
+    return abrirEditarPerfil();
+  }
+
+  const c = calculo || calculoPerfil();
+  const r = await nube.publicarPerfil({
+    alias: p.alias,
+    nombre: p.nombre,
+    bio: p.bio,
+    fotoUrl: p.fotoUrl,
+    publico: true,
+    resumen: {
+      diasEntrenados: c.resumen.diasEntrenados,
+      seriesTotales: c.resumen.seriesTotales,
+      rachaDias: c.resumen.rachaDias,
+      rachaSemanas: c.resumen.rachaSemanas,
+      mejorRachaSemanas: c.resumen.mejorRachaSemanas,
+      prs: c.resumen.prs,
+      volumenTon: Math.round(c.resumen.volumenTon * 10) / 10,
+      diasDesdeLaPrimera: c.resumen.diasDesdeLaPrimera,
+      veterania: c.veterania.nombre,
+    },
+    insignias: c.ganadas.map((i) => i.id),
+    medallas: p.medallasElegidas.filter((id) => c.medallasGanadas.some((m) => m.id === id)),
+    // Los nombres de sus rutinas y cuántos ejercicios tiene cada una. Sin el
+    // plan: para llevarse la rutina está el enlace, que es un acto voluntario.
+    rutinas: S.cache.rutinas.filter((x) => planDe(x).length)
+      .map((x) => ({ nombre: x.nombre, ejercicios: planDe(x).length })),
+    notas: p.notas.map((n) => n.texto),
+  });
+
+  if (!r.ok) return aviso(`No pude publicarlo: ${r.motivo}`, 3400);
+  await guardarPerfil({ publico: 1 });
+  aviso('Perfil publicado');
+  pintar();
+}
+
+/* --------------------------------------------------------------------------
+ * Compartir
+ * ------------------------------------------------------------------------ */
+
+/**
+ * La hoja del enlace.
+ *
+ * Se enseña el enlace ENTERO y se puede copiar además de mandarlo. Un botón de
+ * «compartir» a secas, cuando el selector del móvil falla o no está, deja sin
+ * salida — y el enlace es justo lo que se ha venido a buscar.
+ */
+function hojaEnlace(titulo, enlace, texto) {
+  // Sin dirección pública no hay enlace que mandar, y hay que decirlo con la
+  // salida delante. Enseñar `/#/i/eyJ0…` sería dar algo que parece un enlace,
+  // se copia tan ricamente y no abre en ninguna parte.
+  if (enlace.sinRaiz) {
+    return hoja(
+      'Falta dónde vive la app',
+      `<p class="campo-nota" style="margin-top:0">Un enlace tiene que apuntar a algún sitio, y
+         la app todavía no sabe cuál es el suyo. Dentro del móvil se sirve desde una dirección
+         que <b>solo existe aquí dentro</b>, así que no le vale a nadie de fuera.</p>
+       <p class="campo-nota">Pega la dirección pública de la app y los enlaces empezarán a
+         funcionar. Es la que te dio Cloudflare Pages al publicarla.</p>
+       <button class="boton" id="ce-config">Ponerla ahora</button>`,
+      (cuerpo, cerrar) => {
+        $('#ce-config', cuerpo).onclick = () => { cerrar(); abrirConfigNube(); };
+      }
+    );
+  }
+  hoja(
+    titulo,
+    `<p class="campo-nota">${esc(texto)}</p>
+     <div class="pf-enlace"><code id="ce-url">${esc(enlace.url)}</code></div>
+     ${enlace.corto ? '' : `<p class="campo-nota">Este enlace lleva la rutina dentro,
+        por eso es largo. Funciona igual, y sin necesitar cuenta ni internet para
+        crearlo${enlace.motivo ? ` (${esc(enlace.motivo)})` : ''}.</p>`}
+     <div class="botonera">
+       <button class="boton" id="ce-mandar">${icono('enviar', 17)} Mandar por WhatsApp u otra app</button>
+       <button class="boton boton-2" id="ce-copiar">${icono('copiar', 17)} Copiar el enlace</button>
+     </div>`,
+    (cuerpo, cerrar) => {
+      $('#ce-mandar', cuerpo).onclick = async () => {
+        // OJO: `navigator.share` exige el gesto del usuario, así que esto se
+        // llama DIRECTO desde el onclick, sin ningún await por delante.
+        const r = await comp.mandar({ url: enlace.url, texto });
+        if (r.como === 'copiado') aviso('Enlace copiado: pégalo en WhatsApp');
+        if (r.como === 'whatsapp') window.open(r.whatsapp, '_blank', 'noopener');
+        if (r.como === 'compartir') cerrar();
+      };
+      $('#ce-copiar', cuerpo).onclick = async () => {
+        aviso(await comp.copiar(enlace.url) ? 'Enlace copiado' : 'No pude copiarlo: selecciónalo a mano');
+      };
+    }
+  );
+}
+
+async function compartirRutina(rutinaId) {
+  const rutina = S.cache.rutinas.find((x) => x.id === rutinaId);
+  if (!rutina) return;
+  const plan = planDe(rutina);
+  if (!plan.length) return aviso('Esa rutina no tiene ejercicios todavía');
+
+  const p = perfilActual();
+  const paquete = comp.empaquetarRutina(rutina, plan, mapa(S.cache.maquinas), p.nombre || p.alias);
+  aviso('Preparando el enlace…', 1200);
+  const enlace = await comp.enlaceDe(paquete);
+  hojaEnlace(`Compartir «${rutina.nombre}»`, enlace, comp.textoDe(paquete, p.nombre || p.alias));
+}
+
+/**
+ * Publicar una rutina para que la vea todo el mundo.
+ *
+ * COMPARTIR Y PUBLICAR NO SON LO MISMO, y por eso son dos botones y no uno:
+ *  · Compartir manda un ENLACE a quien tú eliges. No lo ve nadie más.
+ *  · Publicar la pone en una lista pública que puede abrir cualquiera, con tu
+ *    nombre encima.
+ * Confundirlas sería el peor fallo posible de esta pantalla, así que la hoja lo
+ * dice antes de que se pulse, no después.
+ */
+async function publicarRutina(rutinaId) {
+  const rutina = S.cache.rutinas.find((x) => x.id === rutinaId);
+  if (!rutina) return;
+  const plan = planDe(rutina);
+  if (!plan.length) return aviso('Esa rutina no tiene ejercicios todavía');
+  if (!nube.usuario()) return abrirCuenta({ modoInicial: 'registro' });
+
+  const p = perfilActual();
+  const paquete = comp.empaquetarRutina(rutina, plan, mapa(S.cache.maquinas), p.nombre || p.alias);
+  const exp = await db.ajuste('experiencia', 'cualquiera');
+  const dias = Math.max(1, Math.min(7, S.cache.rutinas.length));
+
+  hoja(
+    `Publicar «${rutina.nombre}»`,
+    `<p class="campo-nota" style="margin-top:0">Esto <b>no es compartir un enlace</b>: la rutina
+       aparecerá en la lista pública con tu nombre de usuario y cualquiera podrá llevársela,
+       marcarla y comentarla. La puedes quitar cuando quieras desde tu perfil.</p>
+     <p class="campo-nota">Van los <b>${plan.length} ejercicios y sus series</b>. No van tus pesos,
+       ni tus fotos, ni tu historial.</p>
+     <div class="campo"><label for="pr-desc">Cuéntala en dos líneas (opcional)</label>
+       <textarea id="pr-desc" rows="3" maxlength="600"
+                 placeholder="Para quién es, cuánto dura, qué esperar"></textarea></div>
+     <div class="campo"><label for="pr-nivel">¿Para quién es?</label>
+       <select id="pr-nivel">
+         <option value="cualquiera">Para cualquiera</option>
+         <option value="empiezo" ${exp === 'empiezo' ? 'selected' : ''}>Para empezar</option>
+         <option value="medio" ${exp === 'medio' ? 'selected' : ''}>Nivel medio</option>
+         <option value="avanzado" ${exp === 'avanzado' ? 'selected' : ''}>Avanzada</option>
+       </select></div>
+     <button class="boton" id="pr-ir">Publicarla</button>
+     <p id="pr-estado" class="campo-nota" aria-live="polite"></p>`,
+    (cuerpo, cerrar) => {
+      $('#pr-ir', cuerpo).onclick = async () => {
+        const boton = $('#pr-ir', cuerpo);
+        boton.disabled = true;
+        const r = await social.publicarRutina({
+          nombre: rutina.nombre,
+          descripcion: $('#pr-desc', cuerpo).value.trim(),
+          nivel: $('#pr-nivel', cuerpo).value,
+          dias,
+          datos: paquete,
+        });
+        boton.disabled = false;
+        if (!r.ok) {
+          $('#pr-estado', cuerpo).innerHTML = `<span class="estado-sync pendiente">${esc(r.motivo)}</span>`;
+          return;
+        }
+        cerrar();
+        aviso('Publicada. Ya sale en «Rutinas de la gente»', 3200);
+        pintar();
+      };
+    }
+  );
+}
+
+async function compartirGimnasio(gimnasioId) {
+  const gim = S.cache.gimnasios.find((g) => g.id === gimnasioId);
+  if (!gim) return;
+  const maquinas = S.cache.maquinas.filter((m) => m.gimnasioId === gimnasioId);
+  if (!maquinas.length) return aviso('Ese gimnasio no tiene máquinas todavía');
+
+  const p = perfilActual();
+  const paquete = comp.empaquetarGimnasio(gim, maquinas, p.nombre || p.alias);
+  aviso('Preparando el enlace…', 1200);
+  const enlace = await comp.enlaceDe(paquete);
+  hojaEnlace(`Compartir «${gim.nombre}»`, enlace, comp.textoDe(paquete, p.nombre || p.alias));
+}
+
+async function compartirPerfil() {
+  const p = perfilActual();
+  if (!p.alias) {
+    aviso('Antes ponte un alias: es la dirección de tu perfil', 3000);
+    return abrirEditarPerfil();
+  }
+  if (!p.publico) {
+    if (!await preguntar('Tu perfil está en privado: quien abra el enlace no verá nada.\n\n¿Lo publicas ahora?')) return;
+    await publicar();
+    if (!perfilActual().publico) return;   // la publicación falló, ya se avisó
+  }
+  const url = await comp.enlacePerfil(p.alias);
+  hojaEnlace('Compartir tu perfil', { url, corto: true },
+    `Mira mi perfil de GYM: @${p.alias}`);
+}
+
+/* --------------------------------------------------------------------------
+ * Recibir un enlace
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Alguien ha abierto la app desde un enlace compartido.
+ *
+ * NUNCA se importa sin preguntar. Se enseña lo que trae (todos los ejercicios,
+ * con sus series y reps), en qué gimnasio va a caer y cuántas máquinas se
+ * crearían. Un enlace que mete cosas en la base con solo abrirlo es un enlace
+ * peligroso, y encima quien lo abra por curiosidad se encontraría un gimnasio
+ * nuevo sin saber de dónde salió.
+ */
+async function atenderEnlace(rutaYaLeida = null) {
+  // `rutaYaLeida` viene del arranque, donde se leyó antes de que `pintar()`
+  // pisara el `#`. Desde `hashchange` no hace falta: ahí el `#` acaba de
+  // cambiar y todavía es el bueno.
+  const ruta = rutaYaLeida || comp.leerHash();
+  if (!ruta) return;
+  comp.limpiarHash();     // para que recargar la página no vuelva a preguntar
+
+  if (ruta.que === 'perfil') return abrirPerfilAjeno(ruta.alias);
+
+  const r = await comp.abrir(ruta);
+  if (!r.ok) return aviso(r.motivo, 3600);
+  const paquete = r.paquete;
+
+  if (paquete.tipo === 'rutina') return hojaImportarRutina(paquete);
+  return hojaImportarGimnasio(paquete);
+}
+
+function hojaImportarRutina(paquete) {
+  const gimnasios = S.cache.gimnasios;
+  let destino = S.gimnasioId || (gimnasios[0] && gimnasios[0].id) || null;
+
+  const cuantasFaltan = (gimnasioId) => {
+    const tengo = new Set(S.cache.maquinas.filter((m) => m.gimnasioId === gimnasioId)
+      .map((m) => PF.normalizarNombre(m.nombre)));
+    return paquete.ejercicios.filter((e) => !tengo.has(PF.normalizarNombre(e.nombre))).length;
+  };
+
+  hoja(
+    `Rutina «${paquete.nombre}»`,
+    `<p class="campo-nota">${paquete.autor ? `Te la manda <b>${esc(paquete.autor)}</b>. ` : ''}
+       ${paquete.ejercicios.length} ejercicios.</p>
+     <div class="campo"><label for="ir-gym">¿En qué gimnasio la quieres?</label>
+       <select id="ir-gym">${gimnasios.map((g) => `
+         <option value="${g.id}" ${g.id === destino ? 'selected' : ''}>${esc(g.nombre)}</option>`).join('')}</select></div>
+     <p class="campo-nota" id="ir-faltan"></p>
+     <div class="lista">${paquete.ejercicios.map((e) => `
+       <div class="pf-fila">
+         <div class="pf-fila-texto">
+           <div class="pf-fila-nombre">${esc(e.nombre)}</div>
+           <div class="pf-fila-detalle">${esc((D.GRUPOS.find((g) => g.id === e.grupo) || {}).nombre || '')}</div>
+         </div>
+         <span class="plan-objetivo">${e.series}×${e.reps}</span>
+       </div>`).join('')}</div>
+     <div class="barra-accion"><button class="boton" id="ir-importar">Añadir esta rutina</button></div>`,
+    (cuerpo, cerrar) => {
+      const sel = $('#ir-gym', cuerpo);
+      const aviso1 = $('#ir-faltan', cuerpo);
+
+      const refrescar = () => {
+        destino = sel.value;
+        const n = cuantasFaltan(destino);
+        aviso1.textContent = n
+          ? `${n} de esos ejercicios no los tienes en ese gimnasio: se darán de alta.`
+          : 'Ya tienes todas esas máquinas: no se creará ninguna.';
+      };
+      sel.onchange = refrescar;
+      refrescar();
+
+      if (!gimnasios.length) {
+        aviso1.textContent = 'Primero crea un gimnasio en la pestaña «Gimnasios».';
+        $('#ir-importar', cuerpo).disabled = true;
+        return;
+      }
+
+      $('#ir-importar', cuerpo).onclick = async () => {
+        const res = await comp.importarRutina(paquete, destino, {
+          maquinas: S.cache.maquinas,
+          rutinas: S.cache.rutinas,
+        });
+        await recargar();
+        sync.sincronizar({ silencioso: true });
+        cerrar();
+        aviso(`«${res.rutina.nombre}» añadida · ${res.ejercicios} ejercicios${
+          res.creadas ? `, ${res.creadas} máquinas nuevas` : ''}`, 3600);
+        irA('entrenar');
+      };
+    }
+  );
+}
+
+function hojaImportarGimnasio(paquete) {
+  hoja(
+    `Gimnasio «${paquete.nombre}»`,
+    `<p class="campo-nota">${paquete.autor ? `Te lo manda <b>${esc(paquete.autor)}</b>. ` : ''}
+       ${paquete.maquinas.length} máquinas ya apuntadas${paquete.ciudad ? ` · ${esc(paquete.ciudad)}` : ''}.</p>
+     <p class="campo-nota">Se creará como un gimnasio NUEVO, aunque ya tengas uno con
+       ese nombre: dos gimnasios distintos tienen máquinas distintas y juntarlos
+       partiría el historial de los dos.</p>
+     <div class="lista">${paquete.maquinas.slice(0, 60).map((m) => `
+       <div class="pf-fila">
+         <div class="pf-fila-texto">
+           <div class="pf-fila-nombre">${esc(m.nombre)}</div>
+           <div class="pf-fila-detalle">${esc((D.GRUPOS.find((g) => g.id === m.grupo) || {}).nombre || '')} · ${esc(m.unidad)}</div>
+         </div>
+       </div>`).join('')}
+       ${paquete.maquinas.length > 60 ? `<p class="campo-nota">…y ${paquete.maquinas.length - 60} más.</p>` : ''}</div>
+     <div class="barra-accion"><button class="boton" id="ig-importar">Añadir este gimnasio</button></div>`,
+    (cuerpo, cerrar) => {
+      $('#ig-importar', cuerpo).onclick = async () => {
+        const res = await comp.importarGimnasio(paquete, { gimnasios: S.cache.gimnasios });
+        await recargar();
+        S.gimnasioId = res.gimnasio.id;
+        await db.ponAjuste('ultimo_gym', S.gimnasioId);
+        sync.sincronizar({ silencioso: true });
+        cerrar();
+        aviso(`«${res.gimnasio.nombre}» añadido con ${res.creadas} máquinas`, 3600);
+        irA('entrenar');
+      };
+    }
+  );
+}
+
+/** El perfil público de otra persona. Solo se mira: aquí no se importa nada. */
+async function abrirPerfilAjeno(alias) {
+  aviso('Buscando ese perfil…', 1400);
+  const r = await nube.perfilDe(alias);
+  if (!r.ok) return aviso(r.motivo, 3200);
+  const p = r.perfil;
+  const res = p.resumen || {};
+  const suyas = new Set(p.insignias || []);
+  const medallas = (p.medallas || []).map((id) => INS.MEDALLA_POR_ID.get(id)).filter(Boolean);
+  const insignias = INS.INSIGNIAS.filter((i) => suyas.has(i.id))
+    .sort((a, b) => b.nivel - a.nivel).slice(0, 8);
+
+  hoja(
+    `@${alias}`,
+    `<div class="pf-cabeza">
+       ${p.foto_url
+         ? `<img class="pf-foto" style="width:76px;height:76px" src="${esc(p.foto_url)}" alt="Foto de ${esc(alias)}">`
+         : `<span class="pf-foto pf-iniciales" style="width:76px;height:76px;font-size:27px" aria-hidden="true">${
+             esc((p.nombre || alias)[0].toUpperCase())}</span>`}
+       <div class="pf-quien">
+         <h2 class="pf-nombre">${esc(p.nombre || alias)}</h2>
+         <div class="pf-nivel"><span>${esc(res.veterania || '')}</span></div>
+       </div>
+     </div>
+     ${p.bio ? `<p class="pf-bio">${esc(p.bio)}</p>` : ''}
+     <div class="botonera" id="pa-acciones"></div>
+     <div class="pf-social">
+       <button class="pf-social-c" data-cuales="seguidores">
+         <b>${Number(p.n_seguidores) || 0}</b><span>seguidores</span></button>
+       <button class="pf-social-c" data-cuales="siguiendo">
+         <b>${Number(p.n_siguiendo) || 0}</b><span>siguiendo</span></button>
+       <span class="pf-social-c"><b>${Number(p.n_rutinas) || 0}</b><span>rutinas</span></span>
+     </div>
+     <div class="pf-cifras">
+       ${cifraHTML(res.diasEntrenados ?? '—', 'días')}
+       ${cifraHTML(res.rachaSemanas ?? '—', 'semanas')}
+       ${cifraHTML(res.prs ?? '—', 'récords')}
+       ${cifraHTML(res.volumenTon != null ? redondear(res.volumenTon, 1) : '—', 'toneladas')}
+     </div>
+     ${medallas.length ? `<h4 class="pf-familia">Medallas</h4>
+       <div class="pf-vitrina">${medallas.map((m) => `
+         <figure class="pf-pieza">${INS.dibujarMedalla(m, true, 58)}
+         <figcaption>${esc(m.nombre)}</figcaption></figure>`).join('')}</div>` : ''}
+     ${insignias.length ? `<h4 class="pf-familia">Insignias</h4>
+       <div class="pf-vitrina">${insignias.map((i) => `
+         <figure class="pf-pieza">${INS.dibujarInsignia(i, true, 58)}
+         <figcaption>${esc(i.nombre)}</figcaption></figure>`).join('')}</div>` : ''}
+     ${(p.rutinas || []).length ? `<h4 class="pf-familia">Sus rutinas</h4>
+       <div class="lista">${p.rutinas.map((x) => `
+         <div class="pf-fila"><div class="pf-fila-texto">
+           <div class="pf-fila-nombre">${esc(x.nombre)}</div>
+           <div class="pf-fila-detalle">${Number(x.ejercicios) || 0} ejercicios</div>
+         </div></div>`).join('')}</div>
+       <p class="campo-nota">Para llevarte una, pídesela: te mandará el enlace.</p>` : ''}
+     ${(p.notas || []).length ? `<h4 class="pf-familia">Sus anotaciones</h4>
+       <div class="lista">${p.notas.map((t) => `
+         <div class="pf-fila"><div class="pf-fila-texto pf-nota-texto">${esc(t)}</div></div>`).join('')}</div>` : ''}`,
+    (cuerpo) => {
+      pintarExclusivasEn(cuerpo, p.exclusivas);
+      pintarBotonSeguir($('#pa-acciones', cuerpo), alias);
+      $$('.pf-social-c[data-cuales]', cuerpo).forEach((b) => (b.onclick = () =>
+        abrirListaDeGente(alias, b.dataset.cuales)));
+      // DENUNCIAR. Carlos: «se deberían poder denunciar las cuentas que tengan
+      // un mal comportamiento». Va abajo del todo y en gris: es una salida, no
+      // una acción que se ofrezca antes que seguir a alguien.
+      if (p.id && nube.usuario() && p.id !== nube.usuario().id) {
+        const pie = document.createElement('div');
+        pie.className = 'pf-denunciar';
+        pie.innerHTML = '<button type="button" class="boton boton-2" '
+          + `id="pa-denunciar">Denunciar a @${esc(alias)}</button>`;
+        cuerpo.appendChild(pie);
+        $('#pa-denunciar', pie).onclick = () => abrirDenuncia('perfil', p.id, `@${alias}`);
+      }
+    }
+  );
+}
+
+/* ==========================================================================
+ * EL PANEL DEL MODERADOR  (v0.22.0)
+ *
+ * Carlos, 2-sep-2026: *«dame alguna interfaz para mi cuenta (…) para poder
+ * gestionar una especie de panel, poder gestionar solicitudes o incidencias o
+ * reportes (…) básate en precedentes, no quiero inventar la rueda: busca cómo
+ * se suele moderar una app»*.
+ *
+ * DE DÓNDE SALE ESTE DISEÑO (no de la cabeza de nadie)
+ * ---------------------------------------------------
+ * Del `modqueue` de Reddit, que es el precedente con más kilómetros que hay, y
+ * del trabajo que lo estudió: «"Think about it like you're a firefighter":
+ * Understanding How Reddit Moderators Use the Modqueue» (CHI 2026) y «Towards a
+ * Better Modqueue» (arXiv 2409.16840). Lo que se copia, punto por punto:
+ *
+ *   · UNA SOLA COLA. Todo lo que hay que atender vive en el mismo sitio, no
+ *     repartido por siete pantallas. Aquí: solicitudes de gimnasio y denuncias.
+ *   · SE ORDENA A MANO. El estudio encontró que los moderadores priorizan por
+ *     ANTIGÜEDAD o por CUÁNTA GENTE lo ha reportado, y que cada uno trabaja de
+ *     una manera. Así que hay un selector de orden, no un orden impuesto.
+ *   · CONTEXTO EN LA PROPIA FILA. La queja número uno del estudio es que la
+ *     cola no da lo suficiente para decidir sin salir de ella. Por eso cada
+ *     denuncia trae el motivo, el texto, CUÁNTAS veces se ha denunciado a ese
+ *     mismo objetivo, y un botón para abrir el perfil denunciado.
+ *   · LAS ACCIONES, EN LA FILA. Nada de abrir un formulario para decir que sí.
+ *
+ * Lo que NO se copia: Reddit tiene la cola en el escritorio. Esto es un móvil
+ * de 360 px, así que en vez de una tabla son tarjetas apiladas, las pestañas
+ * van arriba y todos los botones pasan de 44 px.
+ *
+ * Y LO IMPORTANTE: esta pantalla no da permisos. Sale si la BASE contesta que
+ * sí a `soy_moderador()`, y aun así cada acción lo vuelve a comprobar por su
+ * cuenta en el servidor. Esconder un botón nunca ha sido un permiso.
+ * ========================================================================== */
+
+/** Si esta cuenta modera, se enseña la entrada al panel con lo que hay abierto. */
+async function ofrecerModeracion(raiz) {
+  const fila = $('#pf-mod-fila', raiz);
+  if (!fila) return;
+  if (!nube.usuario() || !(await nube.hayNube())) return;
+  if (!(await social.soyModerador())) return;
+  fila.hidden = false;
+  const [ped, den] = await Promise.all([social.pedidosGimnasio('', 50), social.denunciasAbiertas(50)]);
+  const n = ((ped.ok && ped.pedidos.length) || 0) + ((den.ok && den.denuncias.length) || 0);
+  const chip = $('#pf-mod-n', raiz);
+  if (chip) chip.textContent = n ? String(n) : '';
+}
+
+/** El estado del panel: qué pestaña y con qué orden. Vive entre pintadas. */
+const MOD = { pestana: 'gimnasios', orden: 'apoyos' };
+
+function abrirModeracion() {
+  if (!nube.usuario()) return abrirCuenta();
+  hoja(
+    'Moderación',
+    `<div class="mod-tabs" role="tablist">
+       <button class="mod-tab" role="tab" data-tab="gimnasios">Gimnasios
+         <span class="chip-cola" data-n="gimnasios"></span></button>
+       <button class="mod-tab" role="tab" data-tab="denuncias">Denuncias
+         <span class="chip-cola" data-n="denuncias"></span></button>
+       <button class="mod-tab" role="tab" data-tab="equipo">Equipo</button>
+     </div>
+     <div id="mod-cuerpo" aria-live="polite">
+       <p class="grafica-vacia">Cargando…</p></div>`,
+    (cuerpo) => {
+      const pintarTabs = () => $$('.mod-tab', cuerpo).forEach((b) => {
+        const activa = b.dataset.tab === MOD.pestana;
+        b.setAttribute('aria-selected', activa ? 'true' : 'false');
+        b.classList.toggle('mod-tab-activa', activa);
+      });
+      $$('.mod-tab', cuerpo).forEach((b) => (b.onclick = () => {
+        MOD.pestana = b.dataset.tab;
+        pintarTabs();
+        refrescarModeracion(cuerpo);
+      }));
+      pintarTabs();
+      refrescarModeracion(cuerpo);
+    },
+  );
+}
+
+/** «hace 3 días» — la antigüedad, que es por lo que se prioriza media cola. */
+function haceCuanto(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const dias = Math.floor((Date.now() - t) / 86400000);
+  if (dias <= 0) return 'hoy';
+  if (dias === 1) return 'ayer';
+  if (dias < 31) return `hace ${dias} días`;
+  const meses = Math.round(dias / 30);
+  return meses < 12 ? `hace ${meses} meses` : `hace más de un año`;
+}
+
+async function refrescarModeracion(cuerpo) {
+  const zona = $('#mod-cuerpo', cuerpo);
+  if (!zona) return;
+  zona.innerHTML = '<p class="grafica-vacia">Cargando…</p>';
+
+  const [ped, den] = await Promise.all([social.pedidosGimnasio('', 50), social.denunciasAbiertas(50)]);
+  if (!ped.ok && !den.ok) {
+    zona.innerHTML = `<p class="grafica-vacia">${esc(ped.motivo || den.motivo
+      || 'No he podido leer la cola')}</p>`;
+    return;
+  }
+  const pedidos = ped.ok ? ped.pedidos.slice() : [];
+  const denuncias = den.ok ? den.denuncias.slice() : [];
+  // Los contadores de las pestañas: una cola sin número no se abre.
+  $$('[data-n]', cuerpo).forEach((c) => {
+    const n = c.dataset.n === 'gimnasios' ? pedidos.length : denuncias.length;
+    c.textContent = n ? String(n) : '';
+  });
+
+  const tras = async (promesa) => {
+    const r = await promesa;
+    if (!r.ok) return aviso(r.motivo, 3400);
+    await refrescarModeracion(cuerpo);
+  };
+
+  if (MOD.pestana === 'equipo') return pintarEquipo(zona, cuerpo);
+
+  if (MOD.pestana === 'denuncias') {
+    if (!denuncias.length) {
+      zona.innerHTML = '<p class="grafica-vacia">Ninguna denuncia abierta. '
+        + 'Cuando alguien denuncie una cuenta, un gimnasio o una rutina, aparecerá aquí.</p>';
+      return;
+    }
+    // Por VECES primero: si a alguien lo han denunciado siete personas, eso es
+    // lo que hay que mirar antes que lo que llegó primero.
+    denuncias.sort((a, b) => (MOD.orden === 'antiguas'
+      ? Date.parse(a.creado) - Date.parse(b.creado)
+      : (Number(b.veces) || 0) - (Number(a.veces) || 0)));
+    zona.innerHTML = ordenHTML('Más denunciadas', 'Más antiguas')
+      + denuncias.map((d) => `
+      <article class="mod-caso">
+        <header class="mod-caso-cab">
+          <span class="mod-etiq">${esc(d.tipo)}</span>
+          <span class="mod-cuando">${esc(haceCuanto(d.creado))}</span>
+        </header>
+        <h4 class="mod-caso-t">${esc(d.etiqueta || d.objetivo)}</h4>
+        <p class="mod-caso-m"><b>${esc(motivoEnCristiano(d.motivo))}</b>
+          · ${Number(d.veces) || 1} ${Number(d.veces) === 1 ? 'denuncia' : 'denuncias'}</p>
+        ${d.texto ? `<blockquote class="mod-caso-cita">${esc(d.texto)}</blockquote>` : ''}
+        ${d.tipo === 'perfil' && d.etiqueta
+          ? `<button class="boton boton-2 mod-ver" data-perfil="${esc(d.etiqueta)}">
+               ${icono('persona', 16)} Ver el perfil</button>` : ''}
+        <div class="mod-acciones">
+          <button class="boton boton-2" data-nada="${esc(d.id)}">Sin motivo</button>
+          <button class="boton boton-2" data-aviso="${esc(d.id)}">Avisar</button>
+          ${d.tipo === 'perfil'
+            ? `<button class="boton boton-peligro" data-baja="${esc(d.id)}">Desactivar cuenta</button>`
+            : d.tipo === 'gimnasio'
+              ? `<button class="boton boton-peligro" data-borrar="${esc(d.id)}">Borrar gimnasio</button>`
+              : ''}
+        </div>
+      </article>`).join('');
+    cablearOrden(zona, cuerpo);
+    $$('[data-perfil]', zona).forEach((b) => (b.onclick = () => abrirPerfilAjeno(b.dataset.perfil)));
+    $$('[data-nada]', zona).forEach((b) => (b.onclick = () =>
+      tras(social.resolverDenuncia(b.dataset.nada, 'nada'))));
+    $$('[data-aviso]', zona).forEach((b) => (b.onclick = () =>
+      tras(social.resolverDenuncia(b.dataset.aviso, 'aviso'))));
+    $$('[data-baja]', zona).forEach((b) => (b.onclick = async () => {
+      if (!await preguntar('¿Desactivar esa cuenta? Deja de verse, pero no se borra nada suyo.')) return;
+      tras(social.resolverDenuncia(b.dataset.baja, 'desactivar'));
+    }));
+    $$('[data-borrar]', zona).forEach((b) => (b.onclick = async () => {
+      if (!await preguntar('¿Borrar ese gimnasio público?')) return;
+      tras(social.resolverDenuncia(b.dataset.borrar, 'borrar'));
+    }));
+    return;
+  }
+
+  /* --------------------------------------------------------- gimnasios */
+  if (!pedidos.length) {
+    zona.innerHTML = '<p class="grafica-vacia">No hay ningún gimnasio pendiente. '
+      + 'Cuando alguien pida uno que no existe, aparecerá aquí para que lo revises.</p>';
+    return;
+  }
+  pedidos.sort((a, b) => (MOD.orden === 'antiguas'
+    ? Date.parse(a.creado) - Date.parse(b.creado)
+    : (Number(b.n_apoyos) || 0) - (Number(a.n_apoyos) || 0)));
+  zona.innerHTML = ordenHTML('Más pedidos', 'Más antiguos')
+    + pedidos.map((x) => {
+      const apoyos = Number(x.n_apoyos) || 0;
+      const faltan = Number(x.faltan) || 0;
+      const hayCoords = Number.isFinite(Number(x.lat)) && x.lat !== null;
+      return `
+      <article class="mod-caso">
+        <header class="mod-caso-cab">
+          <span class="mod-etiq">${apoyos} ${apoyos === 1 ? 'petición' : 'peticiones'}</span>
+          <span class="mod-cuando">${esc(haceCuanto(x.creado))}</span>
+        </header>
+        <h4 class="mod-caso-t">${esc(x.nombre)}</h4>
+        <p class="mod-caso-m">${esc([x.ciudad, x.direccion].filter(Boolean).join(' · ')
+          || 'sin dirección')}</p>
+        <!-- La barra dice de un vistazo si esto ya lo pide medio barrio o lo
+             pide una sola persona, que es lo que cambia la decisión. -->
+        <div class="mod-barra" role="img"
+             aria-label="${apoyos} de ${apoyos + faltan} peticiones">
+          <span style="width:${Math.min(100, (apoyos / Math.max(1, apoyos + faltan)) * 100).toFixed(0)}%"></span>
+        </div>
+        <p class="mod-caso-p">${faltan > 0
+          ? `Faltan ${faltan} para llegar al listón`
+          : 'Ya pasa del listón: esto lo pide bastante gente'}</p>
+        ${hayCoords
+          ? `<button class="boton boton-2 mod-ver" data-mapa="${x.lat},${x.lon}">
+               ${icono('pin', 16)} Ver dónde dicen que está</button>`
+          : '<p class="mod-caso-p">Sin coordenadas: solo con el nombre y la dirección.</p>'}
+        <div class="mod-acciones">
+          <button class="boton" data-crear="${esc(x.id)}">Crearlo</button>
+          <button class="boton boton-peligro" data-negar="${esc(x.id)}">Rechazar</button>
+        </div>
+      </article>`;
+    }).join('');
+  cablearOrden(zona, cuerpo);
+  $$('[data-mapa]', zona).forEach((b) => (b.onclick = () => {
+    const [la, lo] = b.dataset.mapa.split(',').map(Number);
+    abrirMapaSuelto(la, lo);
+  }));
+  $$('[data-crear]', zona).forEach((b) => (b.onclick = () =>
+    tras(social.resolverPedidoGimnasio(b.dataset.crear, true))));
+  $$('[data-negar]', zona).forEach((b) => (b.onclick = async () => {
+    if (!await preguntar('¿Rechazar esta solicitud?')) return;
+    tras(social.resolverPedidoGimnasio(b.dataset.negar, false));
+  }));
+}
+
+/**
+ * Los motivos, en cristiano: en la cola no puede salir un identificador.
+ *
+ * Es una FUNCIÓN y no una constante a propósito: `MOTIVOS_DENUNCIA` se declara
+ * más abajo en el fichero, y una constante de módulo que la lea al cargar
+ * revienta con un ReferenceError antes de que la app llegue a pintar nada.
+ */
+function motivoEnCristiano(id) {
+  const fila = MOTIVOS_DENUNCIA.find(([v]) => v === id);
+  return fila ? fila[1] : id;
+}
+
+/** El selector de orden. Dos, no siete: cada uno prioriza a su manera. */
+function ordenHTML(porDefecto, porFecha) {
+  return `<div class="mod-orden">
+    <button class="mod-orden-b${MOD.orden === 'apoyos' ? ' mod-orden-on' : ''}"
+            data-orden="apoyos">${esc(porDefecto)}</button>
+    <button class="mod-orden-b${MOD.orden === 'antiguas' ? ' mod-orden-on' : ''}"
+            data-orden="antiguas">${esc(porFecha)}</button>
+  </div>`;
+}
+
+function cablearOrden(zona, cuerpo) {
+  $$('[data-orden]', zona).forEach((b) => (b.onclick = () => {
+    MOD.orden = b.dataset.orden;
+    refrescarModeracion(cuerpo);
+  }));
+}
+
+/** Un mapa a pantalla, sin nada más: para mirar dónde cae una solicitud. */
+function abrirMapaSuelto(lat, lon) {
+  hoja('Dónde dicen que está',
+    '<div id="ms-mapa"></div>',
+    (c) => geo.pintarMapa($('#ms-mapa', c), lat, lon, { z: 16 }));
+}
+
+/** La pestaña de equipo: quién modera, y cómo se nombra a otro. */
+async function pintarEquipo(zona, cuerpo) {
+  zona.innerHTML = `
+    <p class="campo-nota" style="margin-top:0">Quién modera es <b>público</b>: si alguien
+      puede desactivar tu cuenta, lo mínimo es que se sepa quién es.</p>
+    <div class="campo"><label for="mod-alias">Nombrar a otro moderador</label>
+      <input type="text" id="mod-alias" placeholder="su alias" autocomplete="off"
+             enterkeyhint="done"></div>
+    <button class="boton" id="mod-nombrar">Nombrarlo</button>
+    <p class="campo-nota">No se puede quitar al último: una cola sin nadie que la
+      atienda es peor que no tener cola.</p>`;
+  $('#mod-nombrar', zona).onclick = async () => {
+    const alias = $('#mod-alias', zona).value.trim().toLowerCase();
+    if (!alias) return aviso('Escribe el alias');
+    const r = await social.nombrarModerador(alias, true);
+    if (!r.ok) return aviso(r.motivo, 3400);
+    aviso(`@${alias} ya modera`, 3000);
+    $('#mod-alias', zona).value = '';
+  };
+}
+
+/* ==========================================================================
+ * DENUNCIAR  (v0.21.0)
+ *
+ * Carlos, 2-sep-2026: *«creo que también se deberían poder denunciar las
+ * cuentas que tengan un mal comportamiento»*.
+ *
+ * Lo que se ve aquí es un formulario; lo que decide es la base. Una denuncia la
+ * leen SU AUTOR y los moderadores, y nadie más: enseñar quién ha denunciado a
+ * quién convertiría la herramienta de protegerse en otra forma de acosar. Esa
+ * regla vive en la política RLS de `denuncias`, no en esta pantalla.
+ * ========================================================================== */
+const MOTIVOS_DENUNCIA = [
+  ['insultos', 'Insultos o acoso'],
+  ['spam', 'Spam o publicidad'],
+  ['suplantacion', 'Se hace pasar por otra persona'],
+  ['datos_falsos', 'Datos falsos (marcas o gimnasio inventados)'],
+  ['contenido_sexual', 'Contenido sexual'],
+  ['otro', 'Otra cosa'],
+];
+
+function abrirDenuncia(tipo, objetivo, etiqueta) {
+  if (!nube.usuario()) return abrirCuenta();
+  hoja(
+    'Denunciar',
+    `<p class="campo-nota" style="margin-top:0">Vas a denunciar <b>${esc(etiqueta)}</b>.
+       Lo leen los moderadores; la persona denunciada no ve quién ha sido.</p>
+     <div class="campo"><label for="dn-motivo">Motivo</label>
+       <select id="dn-motivo">${MOTIVOS_DENUNCIA.map(([v, t]) =>
+         `<option value="${v}">${esc(t)}</option>`).join('')}</select></div>
+     <div class="campo"><label for="dn-texto">Cuenta qué ha pasado (opcional)</label>
+       <textarea id="dn-texto" rows="4" maxlength="1000"
+                 placeholder="Lo que viste, y dónde"></textarea></div>
+     <button class="boton" id="dn-enviar">Enviar la denuncia</button>`,
+    (cuerpo, cerrar) => {
+      $('#dn-enviar', cuerpo).onclick = async () => {
+        const b = $('#dn-enviar', cuerpo);
+        b.disabled = true;
+        const r = await social.denunciar(tipo, objetivo,
+          $('#dn-motivo', cuerpo).value, $('#dn-texto', cuerpo).value.trim());
+        b.disabled = false;
+        if (!r.ok) return aviso(r.motivo, 3400);
+        cerrar();
+        aviso('Denuncia enviada. Gracias', 3000);
+      };
+    },
+  );
+}
+
+/* ==========================================================================
+ * LA GENTE  (v0.16.0)
+ *
+ * Carlos, 31-ago-2026: *«que hay una opción de buscar usuarios, añadir amigos
+ * etc… (…) se debería poder poner el perfil en público o privado y administrar
+ * seguidores y solicitud»*.
+ *
+ * QUIÉN DECIDE QUÉ. Aquí no se decide nada: si seguir a alguien entra directo o
+ * se queda esperando lo dice la BASE mirando si ese perfil es público (ver
+ * `seguir()` en `schema-2-social.sql`). Si lo decidiera esta pantalla,
+ * cualquiera podría pedir «aceptado» y colarse en un perfil privado — y el
+ * móvil se puede abrir y volver a empaquetar, así que sería cuestión de tiempo.
+ * ========================================================================== */
+
+/**
+ * Mis números sociales y mis medallas exclusivas, traídos aparte.
+ *
+ * VAN DESPUÉS DE PINTAR, y no dentro del HTML, por dos motivos: son una
+ * petición a la red (el perfil no puede esperar a que conteste para verse) y
+ * pueden fallar sin que eso rompa nada. Mientras llegan se enseña un punto, no
+ * un cero: un cero afirma «no tienes seguidores» y eso todavía no se sabe.
+ */
+async function cargarMisNumerosSociales(raiz) {
+  const nSeg = $('#pf-n-seg', raiz);
+  const nSig = $('#pf-n-sig', raiz);
+  const nRut = $('#pf-n-rut', raiz);
+  if (!nSeg) return;
+
+  const u = nube.usuario();
+  if (!u) {
+    [nSeg, nSig, nRut].forEach((x) => (x.textContent = '—'));
+    return;
+  }
+  const r = await nube.rest(
+    `/rest/v1/perfiles?id=eq.${u.id}&select=n_seguidores,n_siguiendo,n_rutinas,exclusivas`,
+    { conSesion: true });
+  const fila = r.ok && Array.isArray(r.datos) ? r.datos[0] : null;
+  if (!fila) { [nSeg, nSig, nRut].forEach((x) => (x.textContent = '—')); return; }
+  nSeg.textContent = String(fila.n_seguidores || 0);
+  nSig.textContent = String(fila.n_siguiendo || 0);
+  nRut.textContent = String(fila.n_rutinas || 0);
+
+  // Y de paso se repasa si toca alguna exclusiva nueva. Lo decide la base:
+  // una medalla que dice «fuiste de los cien primeros» tiene que concederla
+  // quien lleva la cuenta, no el móvil que la luce.
+  const ex = await social.repasarExclusivas();
+  const zona = $('#pf-exclusivas', raiz);
+  if (!zona || !ex.ok || !ex.exclusivas.length) return;
+  const piezas = ex.exclusivas.map((id) => INS.EXCLUSIVA_POR_ID.get(id)).filter(Boolean);
+  if (!piezas.length) return;
+  zona.innerHTML = `<h4 class="pf-familia">Exclusivas</h4>
+    <div class="pf-vitrina">${piezas.map((x) => `
+      <figure class="pf-pieza">${INS.dibujarExclusiva(x, true, 58)}
+      <figcaption>${esc(x.nombre)}</figcaption></figure>`).join('')}</div>`;
+}
+
+/** Las rutinas que he publicado, para poder quitarlas. */
+async function abrirMisRutinasPublicadas() {
+  if (!nube.usuario()) return abrirCuenta();
+  const r = await social.misRutinasPublicadas();
+  if (!r.ok) return aviso(r.motivo, 3200);
+  hoja(
+    'Tus rutinas publicadas',
+    r.rutinas.length
+      ? `${r.rutinas.map((x) => `
+          <article class="rc-tarjeta">
+            <header class="rc-cabeza">
+              <div><h4 class="rc-nombre">${esc(x.nombre)}</h4>
+                <p class="rc-autor">${x.n_likes} me gusta · ${x.n_comentarios} comentarios ·
+                  ${x.n_copias} ${x.n_copias === 1 ? 'copia' : 'copias'}</p></div>
+            </header>
+            <footer class="rc-pie">
+              <button class="boton-plano mr-com" data-id="${x.id}">Ver comentarios</button>
+              <button class="boton-plano mr-quitar" data-id="${x.id}">Quitar de internet</button>
+            </footer>
+          </article>`).join('')}`
+      : `<p class="grafica-vacia">No has publicado ninguna. Desde <b>Plan</b>, en cada día de
+         entreno, tienes «Publicarla».</p>`,
+    (cuerpo, cerrar) => {
+      $$('.mr-com', cuerpo).forEach((b) => (b.onclick = () => abrirComentarios(b.dataset.id)));
+      $$('.mr-quitar', cuerpo).forEach((b) => (b.onclick = async () => {
+        if (!await preguntar('¿Quitarla de internet?\n\nSe van también sus me gusta y sus comentarios. '
+          + 'La rutina sigue en tu móvil.')) return;
+        await social.borrarRutinaPublicada(b.dataset.id);
+        cerrar();
+        aviso('Quitada');
+        pintar();
+      }));
+    }
+  );
+}
+
+/** Las medallas exclusivas de un perfil, si tiene. */
+function pintarExclusivasEn(cuerpo, exclusivas) {
+  const ids = Array.isArray(exclusivas) ? exclusivas : [];
+  if (!ids.length) return;
+  const piezas = ids.map((id) => INS.EXCLUSIVA_POR_ID.get(id)).filter(Boolean);
+  if (!piezas.length) return;
+  const zona = document.createElement('div');
+  zona.innerHTML = `<h4 class="pf-familia">Exclusivas</h4>
+    <div class="pf-vitrina">${piezas.map((x) => `
+      <figure class="pf-pieza">${INS.dibujarExclusiva(x, true, 58)}
+      <figcaption>${esc(x.nombre)}</figcaption></figure>`).join('')}</div>`;
+  const antes = $('.pf-familia', cuerpo);
+  if (antes) antes.parentNode.insertBefore(zona, antes);
+  else cuerpo.appendChild(zona);
+}
+
+/**
+ * El botón de seguir, con los cuatro estados que de verdad existen.
+ *
+ * Sin sesión no se enseña «Seguir» y ya: se enseña por qué no se puede y cómo
+ * arreglarlo. Un botón que no hace nada al pulsarlo se lee como una app rota.
+ */
+async function pintarBotonSeguir(zona, alias) {
+  if (!zona) return;
+  if (!nube.usuario()) {
+    zona.innerHTML = '<button class="boton boton-2" id="pa-cuenta">Entra para seguirle</button>';
+    $('#pa-cuenta', zona).onclick = () => abrirCuenta();
+    return;
+  }
+  const mio = (perfilActual().alias || '').toLowerCase() === String(alias).toLowerCase();
+  if (mio) { zona.innerHTML = '<p class="campo-nota">Este eres tú.</p>'; return; }
+
+  const r = await social.buscarGente(alias, 5);
+  const suyo = (r.gente || []).find((x) => x.alias === String(alias).toLowerCase());
+  const sigo = await social.aQuienSigo();
+  // `buscar_gente` no devuelve el id (a propósito: es la tarjeta mínima), así
+  // que el estado se deduce de lo que ya se sabe y, si no, se pinta «Seguir».
+  const yaEstado = (suyo && sigo.ok && sigo.siguiendo.length)
+    ? (sigo.siguiendo.find((x) => x.alias === suyo.alias) || {}).estado : null;
+
+  const pinta = (estado) => {
+    zona.innerHTML = estado === 'aceptado'
+      ? '<button class="boton boton-2" id="pa-seguir" aria-pressed="true">Siguiendo</button>'
+      : estado === 'pendiente'
+        ? '<button class="boton boton-2" id="pa-seguir" disabled>Solicitud enviada</button>'
+        : '<button class="boton" id="pa-seguir">Seguir</button>';
+    const b = $('#pa-seguir', zona);
+    if (!b || b.disabled) return;
+    b.onclick = async () => {
+      b.disabled = true;
+      const r2 = await social.seguir(alias);
+      b.disabled = false;
+      if (!r2.ok) return aviso(r2.motivo, 3200);
+      pinta(r2.estado);
+      aviso(r2.estado === 'aceptado' ? 'Ya le sigues' : 'Solicitud enviada. Tiene que aceptarla');
+    };
+  };
+  pinta(yaEstado);
+}
+
+/* --------------------------------------------------------------------------
+ * LOS SEGUIDORES, COMO EN CUALQUIER RED SOCIAL  (1-sep-2026)
+ *
+ * Carlos: *«tendría que haber un sitio al que yo pudiese acceder a mis
+ * seguidores, clicando el número de seguidores; que pudieses buscar por nombre,
+ * no solo una lista, y que cuando cliques a una persona te salga su perfil.
+ * Es como una red social, ¿no?»*.
+ *
+ * Lo que faltaba de verdad eran dos cosas: BUSCAR dentro de la lista (con
+ * doscientos seguidores, una lista sin caja de búsqueda es un rollo) y la CARA
+ * de cada uno — un nombre suelto no se reconoce de un vistazo, una foto sí.
+ * Se filtra en el móvil y no pidiéndoselo a la nube: la lista ya está aquí,
+ * así que el filtro es instantáneo y funciona aunque se caiga la cobertura.
+ * ------------------------------------------------------------------------ */
+async function abrirListaDeGente(alias, cuales) {
+  // Sin cuenta no hay seguidores que enseñar, y una hoja vacía no lo explica.
+  if (!alias) return abrirCuenta();
+  const r = await social.seguidoresDe(alias, cuales);
+  const titulo = cuales === 'siguiendo' ? `A quién sigue @${alias}` : `Seguidores de @${alias}`;
+  if (!r.ok) return aviso(r.motivo, 3200);
+  const gente = r.gente || [];
+
+  hoja(
+    titulo,
+    `${gente.length > 6 ? `
+      <div class="campo">
+        <label for="lg-buscar">Buscar en la lista</label>
+        <input type="search" id="lg-buscar" enterkeyhint="search" autocomplete="off"
+               autocapitalize="none" spellcheck="false" placeholder="Nombre o usuario">
+      </div>` : ''}
+     <div id="lg-lista" aria-live="polite"></div>`,
+    (cuerpo, cerrar) => {
+      const zona = $('#lg-lista', cuerpo);
+      const caja = $('#lg-buscar', cuerpo);
+
+      const pintar = (filtro = '') => {
+        const t = filtro.trim().toLowerCase();
+        const vistos = t
+          ? gente.filter((x) => `${x.alias} ${x.alias_visible || ''} ${x.nombre || ''}`
+              .toLowerCase().includes(t))
+          : gente;
+        if (!vistos.length) {
+          zona.innerHTML = `<p class="grafica-vacia">${t
+            ? `Nadie de esta lista se llama «${esc(filtro.trim())}».`
+            : (cuales === 'siguiendo'
+                ? 'Todavía no sigues a nadie. Búscala en «Buscar gente».'
+                : 'Todavía no te sigue nadie. Comparte tu perfil y empieza.')}</p>`;
+          return;
+        }
+        zona.innerHTML = `<div class="lista-elegible">${vistos.map((x) => `
+          <button class="pf-elegible fila-persona-b" data-alias="${esc(x.alias)}">
+            ${x.foto_url
+              ? `<img class="pf-foto fila-cara" src="${esc(x.foto_url)}" alt="">`
+              : `<span class="pf-foto pf-iniciales fila-cara" aria-hidden="true">${
+                  esc(inicialesDe(x.nombre || x.alias_visible || x.alias))}</span>`}
+            <span class="fila-persona-txt">
+              <span class="fila-elegible-t">${esc(x.nombre || x.alias_visible || x.alias)}</span>
+              <span class="fila-elegible-s">@${esc(x.alias_visible || x.alias)}</span>
+            </span>
+          </button>`).join('')}</div>`;
+        // Tocar a alguien abre SU perfil. Es lo que uno espera de una lista de
+        // gente, y era lo que no se podía hacer.
+        $$('.fila-persona-b', zona).forEach((b) => (b.onclick = () => {
+          cerrar();
+          abrirPerfilAjeno(b.dataset.alias);
+        }));
+      };
+
+      pintar();
+      if (caja) caja.oninput = () => pintar(caja.value);
+    }
+  );
+}
+
+/** Las iniciales de un nombre. Mismo criterio que el avatar del perfil. */
+function inicialesDe(texto) {
+  return String(texto || '?').split(/\s+/).filter(Boolean).slice(0, 2)
+    .map((t) => t[0].toUpperCase()).join('') || '?';
+}
+
+/**
+ * Buscar gente y responder solicitudes, en la misma hoja.
+ *
+ * Las solicitudes van ARRIBA y solo si hay: una bandeja vacía permanente enseña
+ * un hueco a diario para nada, y lo que hay que ver cuando hay algo es eso.
+ */
+function abrirGente() {
+  if (!nube.usuario()) return abrirCuenta();
+  hoja(
+    'Gente',
+    `<div id="gt-solicitudes"></div>
+     <div class="campo">
+       <label for="gt-buscar">Buscar por nombre o usuario</label>
+       <input type="search" id="gt-buscar" enterkeyhint="search" autocomplete="off"
+              autocapitalize="none" spellcheck="false" placeholder="Dos letras bastan">
+     </div>
+     <div id="gt-resultados" aria-live="polite">
+       <p class="grafica-vacia">Escribe un nombre para empezar.</p>
+     </div>`,
+    (cuerpo) => {
+      const zonaSol = $('#gt-solicitudes', cuerpo);
+      const zona = $('#gt-resultados', cuerpo);
+      const caja = $('#gt-buscar', cuerpo);
+      let reloj = null;
+
+      const pintarSolicitudes = async () => {
+        const r = await social.misSolicitudes();
+        if (!r.ok || !r.solicitudes.length) { zonaSol.innerHTML = ''; return; }
+        zonaSol.innerHTML = `<h4 class="pf-familia">Quieren seguirte (${r.solicitudes.length})</h4>
+          <div class="lista-elegible">${r.solicitudes.map((x) => `
+            <div class="fila-persona">
+              <span class="fila-elegible-t">${esc(x.alias_visible || x.alias)}</span>
+              <span class="fila-elegible-s">${esc(x.nombre || '')}</span>
+              <span class="fila-persona-2">
+                <button class="boton-plano gt-si" data-id="${esc(x.seguidor)}">Aceptar</button>
+                <button class="boton-plano gt-no" data-id="${esc(x.seguidor)}">No</button>
+              </span>
+            </div>`).join('')}</div>`;
+        $$('.gt-si, .gt-no', zonaSol).forEach((b) => (b.onclick = async () => {
+          b.disabled = true;
+          await social.responderSolicitud(b.dataset.id, b.classList.contains('gt-si'));
+          await pintarSolicitudes();
+        }));
+      };
+      pintarSolicitudes();
+
+      caja.oninput = () => {
+        clearTimeout(reloj);
+        const t = caja.value.trim();
+        if (t.length < 2) {
+          zona.innerHTML = '<p class="grafica-vacia">Escribe un nombre para empezar.</p>';
+          return;
+        }
+        zona.innerHTML = '<p class="grafica-vacia">Buscando…</p>';
+        reloj = setTimeout(async () => {
+          const r = await social.buscarGente(t, 20);
+          if (!r.ok) { zona.innerHTML = `<p class="grafica-vacia">${esc(r.motivo)}</p>`; return; }
+          if (!r.gente.length) {
+            zona.innerHTML = `<p class="grafica-vacia">Nadie con «${esc(t)}».
+              Puede que todavía no tenga cuenta.</p>`;
+            return;
+          }
+          zona.innerHTML = `<div class="lista-elegible">${r.gente.map((x) => `
+            <div class="fila-persona">
+              <span class="fila-elegible-t">${esc(x.alias_visible || x.alias)}</span>
+              <span class="fila-elegible-s">${esc(x.nombre || '')}${x.publico ? '' : ' · privado'}
+                ${x.n_seguidores ? ` · ${x.n_seguidores} seg.` : ''}</span>
+              <span class="fila-persona-2">
+                <button class="boton-plano gt-ver" data-alias="${esc(x.alias)}">Ver</button>
+                <button class="boton-plano gt-seguir" data-alias="${esc(x.alias)}">Seguir</button>
+              </span>
+            </div>`).join('')}</div>`;
+          $$('.gt-ver', zona).forEach((b) => (b.onclick = () => abrirPerfilAjeno(b.dataset.alias)));
+          $$('.gt-seguir', zona).forEach((b) => (b.onclick = async () => {
+            b.disabled = true;
+            const r2 = await social.seguir(b.dataset.alias);
+            if (!r2.ok) { b.disabled = false; return aviso(r2.motivo, 3200); }
+            b.textContent = r2.estado === 'aceptado' ? 'Siguiendo' : 'Solicitado';
+          }));
+        }, 300);
+      };
+    }
+  );
+}
+
+/* ==========================================================================
+ * EL GIMNASIO COMPARTIDO: LA GENTE Y LAS CLASIFICACIONES  (v0.16.0)
+ *
+ * Carlos, 31-ago-2026: *«cuando añadas un gimnasio puedas ver al resto de
+ * miembros, sus records en las máquinas del gym, clasificaciones»*.
+ *
+ * LA REGLA QUE ESTO NO ROMPE, Y CÓMO
+ * ----------------------------------
+ * La regla número uno del proyecto es que **cada máquina solo se compara
+ * consigo misma**: una polea de 40 y un press de 40 no son la misma carga. Una
+ * clasificación parece que la rompe, y no la rompe si —y solo si— compara **la
+ * misma máquina física**: la polea del VivaGym de Reus contra esa misma polea.
+ * Por eso aquí no existe «el más fuerte de la app»: cada clasificación vive
+ * dentro de un gimnasio Y de una máquina.
+ *
+ * LA OTRA REGLA: LOS DATOS NO SALEN DEL MÓVIL
+ * -------------------------------------------
+ * Sigue en pie. Lo que sube es UN NÚMERO por máquina —el mejor peso— y solo de
+ * los gimnasios donde te has apuntado a la clasificación a propósito. No sube
+ * cuándo entrenas, ni cuántas veces, ni lo que has bajado, ni los días que
+ * fallaste. Y salirse borra lo subido.
+ * ========================================================================== */
+
+/** El mejor peso de cada máquina de un gimnasio, en kg. Lo que se publicaría. */
+function mejoresDeGimnasio(gimnasioId) {
+  const maquinas = S.cache.maquinas.filter((m) => m.gimnasioId === gimnasioId);
+  const porId = new Map(maquinas.map((m) => [m.id, m]));
+  const flojas = new Set(S.cache.sesiones.filter((x) => x.excluir).map((x) => x.id));
+  const mejor = new Map();
+  for (const s of S.cache.series) {
+    if (flojas.has(s.sesionId)) continue;
+    const m = porId.get(s.maquinaId);
+    if (!m) continue;
+    const kg = D.aKg(s.peso, m.unidad || 'kg');
+    const antes = mejor.get(m.id);
+    if (!antes || kg > antes.kg) mejor.set(m.id, { nombre: m.nombre, kg, reps: s.reps, fecha: s.fecha });
+  }
+  return [...mejor.values()];
+}
+
+/* --------------------------------------------------------------------------
+ * BUSCAR UN GIMNASIO DE LA APP, Y VER SU FICHA ANTES DE APUNTARSE
+ *
+ * Carlos, 1-sep-2026: *«estaría bien que al buscar el gym inicial puedas ver la
+ * gente asociada a ese gym y las máquinas que hay y rutinas etc...»*.
+ *
+ * Antes esto no existía en la app: buscar un gimnasio público solo se podía
+ * durante la bienvenida, así que quien ya la había pasado no volvía a
+ * encontrar el suyo jamás. Y para ver a la gente había que apuntarse primero,
+ * que es el orden equivocado: lo que uno mira antes de entrar es si hay alguien.
+ * ------------------------------------------------------------------------ */
+function buscarGimnasiosPublicos() {
+  hoja(
+    'Buscar gimnasios',
+    `<p class="campo-nota" style="margin-top:0">Los que ya ha dado de alta alguien.
+       Ábrelo para ver quién entrena allí, qué máquinas tiene y qué rutinas hace su gente
+       — todo eso <b>sin apuntarte</b>.</p>
+     <div class="campo">
+       <label for="bg-texto">Nombre o ciudad</label>
+       <input type="search" id="bg-texto" enterkeyhint="search" autocomplete="off"
+              placeholder="VivaGym, Reus…">
+     </div>
+     <div id="bg-lista" aria-live="polite"></div>
+     <div class="botonera"><button class="boton boton-2" id="bg-crear">${icono('mas', 17)}
+       Crear un gimnasio nuevo</button></div>`,
+    (cuerpo, cerrar) => {
+      const caja = $('#bg-texto', cuerpo);
+      const zona = $('#bg-lista', cuerpo);
+      let reloj = null;
+
+      // CREAR DESDE AQUÍ.  Carlos, 1-sep-2026: *«en el buscador de añadir
+      // gimnasios ni siquiera hace nada, ni se despliega el mapa; ves que no te
+      // deja hacer nada ni añadir ni nada»*. Y era exactamente así: esta hoja
+      // solo miraba los gimnasios que YA ha dado de alta alguien, y cuando no
+      // había ninguno te mandaba por escrito a «Nuevo gimnasio» — un botón que
+      // está en otra pantalla, detrás de cerrar esta hoja. Un callejón sin
+      // salida con la respuesta impresa dentro.
+      const crear = () => {
+        const nombre = caja.value.trim();
+        cerrar();
+        editarGimnasio(null, { nombre });
+      };
+      $('#bg-crear', cuerpo).onclick = crear;
+
+      caja.oninput = () => {
+        clearTimeout(reloj);
+        reloj = setTimeout(async () => {
+          const texto = caja.value.trim();
+          if (texto.length < 2) { zona.innerHTML = ''; return; }
+          zona.innerHTML = '<p class="grafica-vacia">Buscando…</p>';
+          // LOS QUE HAY Y LOS QUE SE ESTÁN PIDIENDO, EN LA MISMA LISTA.
+          //
+          // Si los pedidos no salen aquí, quien busca «Viva gym» no ve que ya
+          // hay tres personas pidiéndolo y abre la solicitud número dieciséis:
+          // exactamente el problema del que venimos. Apoyar el que ya existe
+          // tiene que costar menos que crear otro.
+          const [r, pd] = await Promise.all([
+            social.buscarGimnasios(texto, 20),
+            social.pedidosGimnasio(texto, 10),
+          ]);
+          if (!r.ok) { zona.innerHTML = `<p class="grafica-vacia">${esc(r.motivo)}</p>`; return; }
+          const pedidos = pd.ok ? pd.pedidos : [];
+
+          const pintarPedidos = () => (pedidos.length ? `
+            <h4 class="pf-familia">Pedidos, esperando a un moderador</h4>
+            <div class="lista-elegible">${pedidos.map((x) => `
+              <div class="mod-fila">
+                <div class="fila-persona-txt">
+                  <div class="pf-fila-nombre">${esc(x.nombre)}</div>
+                  <div class="pf-fila-detalle">${esc([x.ciudad, x.direccion]
+                    .filter(Boolean).join(' · ') || 'sin dirección')}</div>
+                  <div class="pf-fila-detalle"><b>${Number(x.n_apoyos) || 0}</b> ${
+                    Number(x.n_apoyos) === 1 ? 'persona lo pide' : 'personas lo piden'}${
+                    Number(x.faltan) > 0 ? ` · faltan ${Number(x.faltan)}` : ' · en cabeza'}</div>
+                </div>
+                <button class="boton boton-2" data-apoyar="${esc(x.id)}"${
+                  x.apoyado ? ' disabled' : ''}>${
+                  x.apoyado ? 'Ya lo has pedido' : 'Yo también entreno aquí'}</button>
+              </div>`).join('')}</div>` : '');
+
+          const cablearApoyos = () => $$('[data-apoyar]', zona).forEach((b) => (b.onclick = async () => {
+            if (!nube.usuario()) return abrirCuenta();
+            b.disabled = true;
+            const res = await social.apoyarGimnasio(b.dataset.apoyar);
+            if (!res.ok) { b.disabled = false; return aviso(res.motivo, 3400); }
+            b.textContent = 'Ya lo has pedido';
+            aviso(Number(res.faltan) > 0
+              ? `Apuntado. Faltan ${Number(res.faltan)} para que suba a lo alto de la cola`
+              : 'Apuntado. Ya está en cabeza', 3200);
+          }));
+
+          if (!r.gimnasios.length) {
+            zona.innerHTML = `<p class="grafica-vacia">Nadie ha dado de alta ninguno con ese
+              nombre.</p>${pintarPedidos()}
+              <div class="botonera"><button class="boton" id="bg-crear-este">Pedir
+                «${esc(texto)}»</button></div>`;
+            $('#bg-crear-este', zona).onclick = crear;
+            cablearApoyos();
+            return;
+          }
+          zona.innerHTML = `<div class="lista-elegible">${r.gimnasios.map((g) => `
+            <button type="button" class="pf-elegible fila-elegible" data-id="${g.id}">
+              <span class="fila-elegible-t">${esc(g.nombre)}</span>
+              <span class="fila-elegible-s">${esc(g.ciudad || g.direccion || '')}${
+                g.n_miembros ? ` · ${g.n_miembros} ${g.n_miembros === 1 ? 'persona' : 'personas'}` : ''}</span>
+            </button>`).join('')}</div>${pintarPedidos()}`;
+          $$('.fila-elegible', zona).forEach((b, i) =>
+            (b.onclick = () => abrirFichaGimnasioPublico(r.gimnasios[i])));
+          cablearApoyos();
+        }, 300);
+      };
+      caja.focus();
+    }
+  );
+}
+
+/**
+ * La ficha de un gimnasio público: su gente, sus máquinas y sus rutinas.
+ *
+ * Se puede mirar SIN CUENTA y sin ser miembro — un gimnasio público es público.
+ * Lo que no sale es nada que su dueño no haya publicado: el mejor peso por
+ * máquina y solo de quien ha dicho que quiere salir en la clasificación.
+ */
+async function abrirFichaGimnasioPublico(g) {
+  const idPub = g.id;
+  hoja(
+    g.nombre,
+    '<div id="fg-cuerpo"><p class="grafica-vacia">Cargando…</p></div>',
+    async (cuerpo, cerrar) => {
+      const zona = $('#fg-cuerpo', cuerpo);
+      const [f, ms, mq, rt] = await Promise.all([
+        social.fichaGimnasio(idPub),
+        social.miembrosDe(idPub, 50),
+        social.maquinasDeGimnasio(idPub),
+        social.rutinasDeGimnasio(idPub),
+      ]);
+      if (!f.ok) { zona.innerHTML = `<p class="grafica-vacia">${esc(f.motivo)}</p>`; return; }
+      const ficha = f.ficha;
+      const yaLoTengo = S.cache.gimnasios.some((x) => x.idPublico === idPub);
+
+      zona.innerHTML = `
+        <div class="ficha">
+          ${ficha.direccion || ficha.ciudad
+            ? `<p class="campo-nota" style="margin-top:0">${esc(ficha.direccion || ficha.ciudad)}</p>` : ''}
+          <div class="fg-cifras">
+            <div class="fg-cifra"><b>${ficha.n_miembros}</b><span>${
+              ficha.n_miembros === 1 ? 'persona' : 'personas'}</span></div>
+            <div class="fg-cifra"><b>${ficha.n_maquinas}</b><span>${
+              ficha.n_maquinas === 1 ? 'máquina' : 'máquinas'}</span></div>
+            <div class="fg-cifra"><b>${ficha.n_rutinas}</b><span>${
+              ficha.n_rutinas === 1 ? 'rutina' : 'rutinas'}</span></div>
+          </div>
+          ${yaLoTengo
+            ? '<p class="campo-nota">Ya lo tienes en tu lista.</p>'
+            : `<button class="boton" id="fg-anadir">Añadirlo a mis gimnasios</button>
+               <p class="campo-nota">Añadirlo <b>no publica nada tuyo</b>. Para salir en las
+                 clasificaciones hay que decirlo aparte, desde su ficha.${
+                   nube.usuario() ? ''
+                     : ' Sin cuenta se añade igual, pero no saldrás entre su gente.'}</p>`}
+        </div>
+
+        <h4 class="pf-familia">Quién entrena aquí</h4>
+        ${(ms.miembros || []).length
+          ? `<div class="lista-elegible">${ms.miembros.map((x) => `
+              <button class="pf-elegible fila-elegible" data-alias="${esc(x.alias)}">
+                <span class="fila-elegible-t">${esc(x.alias_visible || x.alias)}</span>
+                <span class="fila-elegible-s">${esc(x.nombre || '')}${
+                  x.compite ? ' · en la clasificación' : ''}</span>
+              </button>`).join('')}</div>`
+          : '<p class="grafica-vacia">Todavía no hay nadie apuntado.</p>'}
+
+        <h4 class="pf-familia">Qué máquinas hay</h4>
+        ${(mq.maquinas || []).length
+          ? `<div class="lista-elegible">${mq.maquinas.map((x) => `
+              <button class="pf-elegible fila-elegible" data-maq="${esc(x.maquina)}"
+                      ${x.hay_clasificacion ? '' : 'disabled'}>
+                <span class="fila-elegible-t">${esc(x.maquina_n)}</span>
+                <span class="fila-elegible-s">${x.cuantos} ${
+                  x.cuantos === 1 ? 'persona' : 'personas'} · mejor ${redondear(x.mejor, 1)} kg${
+                  x.hay_clasificacion ? ' · ver clasificación' : ''}</span>
+              </button>`).join('')}</div>`
+          : `<p class="grafica-vacia">Nadie ha publicado todavía sus marcas aquí, así que no se
+             sabe qué máquinas hay. Se llena solo en cuanto alguien entre en la clasificación.</p>`}
+
+        <h4 class="pf-familia">Lo que entrena su gente</h4>
+        ${(rt.rutinas || []).length
+          ? `<div class="lista-elegible">${rt.rutinas.map((x) => `
+              <button class="pf-elegible fila-elegible" data-rut="${x.id}">
+                <span class="fila-elegible-t">${esc(x.nombre)}</span>
+                <span class="fila-elegible-s">${esc(x.alias_visible || x.alias)} · ${x.dias}
+                  ${x.dias === 1 ? 'día' : 'días'}${x.n_likes ? ` · ${x.n_likes} me gusta` : ''}</span>
+              </button>`).join('')}</div>`
+          : `<p class="grafica-vacia">Nadie de aquí ha publicado una rutina todavía.</p>`}`;
+
+      $$('.fila-elegible[data-alias]', zona).forEach((b) => (b.onclick = () =>
+        abrirPerfilAjeno(b.dataset.alias)));
+      $$('.fila-elegible[data-maq]', zona).forEach((b) => (b.onclick = () =>
+        abrirClasificacion(idPub, b.dataset.maq, ficha.nombre)));
+      $$('.fila-elegible[data-rut]', zona).forEach((b) => (b.onclick = () => {
+        const x = (rt.rutinas || []).find((y) => y.id === b.dataset.rut);
+        if (x) llevarseRutinaPublicada(x);
+      }));
+
+      const bAnadir = $('#fg-anadir', zona);
+      if (bAnadir) bAnadir.onclick = async () => {
+        // SIN CUENTA TAMBIÉN SE AÑADE. Antes esto abría el alta de cuenta y se
+        // acababa ahí: te habías leído la ficha entera y el botón no hacía lo
+        // que dice. Añadir un gimnasio a TU móvil no necesita permiso de nadie
+        // —el nombre, la dirección y las coordenadas son públicos—; lo que sí
+        // necesita cuenta es salir en su lista de miembros, y eso se dice.
+        const conCuenta = !!nube.usuario();
+        if (conCuenta) {
+          const r = await social.entrarEnGimnasio(idPub, false);
+          if (!r.ok) return aviso(r.motivo, 3400);
+        }
+        await db.guardar('gimnasios', {
+          nombre: ficha.nombre,
+          direccion: ficha.direccion || ficha.ciudad || '',
+          ...(Number.isFinite(ficha.lat) ? { lat: ficha.lat, lon: ficha.lon } : {}),
+          idPublico: idPub,
+        });
+        await recargar();
+        cerrar();
+        aviso(conCuenta
+          ? `«${ficha.nombre}» añadido`
+          : `«${ficha.nombre}» añadido. Con una cuenta saldrías entre su gente`, 3600);
+        pintar();
+      };
+    }
+  );
+}
+
+async function abrirGimnasioSocial(gimnasio) {
+  if (!(await nube.hayNube())) {
+    return aviso('Esto necesita la nube configurada. Está en Ajustes', 3400);
+  }
+  const idPub = gimnasio.idPublico || null;
+
+  hoja(
+    gimnasio.nombre,
+    `<div id="gs-cuerpo"><p class="grafica-vacia">Cargando…</p></div>`,
+    async (cuerpo, cerrar) => {
+      const zona = $('#gs-cuerpo', cuerpo);
+
+      if (!idPub) {
+        // Todavía no está conectado con el gimnasio público. Se ofrece buscarlo
+        // o darlo de alta, y se dice qué implica antes de pulsar.
+        zona.innerHTML = `
+          <p class="campo-nota" style="margin-top:0">Este gimnasio solo existe en tu móvil.
+            Si lo conectas, verás a quién más entrena aquí y podrás comparar tus marcas
+            <b>máquina a máquina</b>.</p>
+          <p class="campo-nota">Conectarlo <b>no publica nada</b>: tus pesos siguen siendo
+            tuyos hasta que digas que quieres salir en la clasificación.</p>
+          <button class="boton" id="gs-conectar">Conectar «${esc(gimnasio.nombre)}»</button>`;
+        /* ------------------------------------------------------------------
+         * CONECTAR YA NO ES CREAR.  (2-sep-2026)
+         *
+         * Carlos: *«no puede ser que hayan 15 viva gyms asociados a una
+         * dirección»*. Y era exactamente lo que hacía este botón: llamaba a
+         * `gimnasio_alta`, que creaba el gimnasio público a la primera sin
+         * mirar si ya había uno igual escrito de otra manera.
+         *
+         * Ahora la base busca primero un PARECIDO —por nombre normalizado en
+         * la misma ciudad, o a menos de 250 m si hay coordenadas— y solo si no
+         * existe se abre una SOLICITUD que aprueba un moderador. Son cuatro
+         * respuestas distintas y cada una dice una cosa distinta.
+         * --------------------------------------------------------------- */
+        $('#gs-conectar', zona).onclick = async () => {
+          if (!nube.usuario()) return abrirCuenta();
+          const r = await social.conectarGimnasio({
+            nombre: gimnasio.nombre, direccion: gimnasio.direccion || '',
+            ciudad: gimnasio.ciudad || '',
+            lat: Number.isFinite(gimnasio.lat) ? gimnasio.lat : null,
+            lon: Number.isFinite(gimnasio.lon) ? gimnasio.lon : null,
+          });
+          if (!r.ok) return aviso(r.motivo, 3400);
+
+          if (r.estado === 'existe' && r.gimnasio) {
+            await social.entrarEnGimnasio(r.gimnasio.id, false);
+            await db.guardar('gimnasios', { ...gimnasio, idPublico: r.gimnasio.id });
+            await recargar();
+            // Se dice CON QUÉ se ha conectado: si la base ha decidido que tu
+            // «Viva gym reus» es el «VivaGym Reus» que ya existía, hay que
+            // enseñarlo, no hacerlo a escondidas.
+            aviso(`Conectado con «${r.gimnasio.nombre}»`, 3600);
+            pintar();
+            return;
+          }
+
+          const faltan = Number(r.faltan || 0);
+          const cuantos = r.pedido ? Number(r.pedido.n_apoyos || 1) : 1;
+          zona.innerHTML = `
+            <p class="campo-nota" style="margin-top:0">${
+              r.estado === 'ya_apoyado'
+                ? 'Ya habías pedido este gimnasio.'
+                : r.estado === 'apoyado'
+                  ? 'Alguien ya lo había pedido: se ha sumado tu voz.'
+                  : 'Este gimnasio todavía no existe en la nube, así que se ha pedido.'}</p>
+            <p class="campo-nota"><b>${cuantos}</b> ${cuantos === 1 ? 'persona lo pide' : 'personas lo piden'}${
+              faltan > 0 ? ` · faltan ${faltan} para que suba a lo alto de la cola` : ' · ya está en cabeza'}.</p>
+            <p class="campo-nota">Lo revisa un moderador. Mientras tanto tu gimnasio
+              funciona igual en el móvil: apuntar pesos no depende de esto.</p>`;
+        };
+        return;
+      }
+
+      const [ms, mq, mios, rt] = await Promise.all([
+        social.miembrosDe(idPub, 50),
+        social.maquinasConClasificacion(idPub),
+        social.misGimnasios(),
+        // LAS RUTINAS DE LA GENTE DE AQUÍ.  (2-sep-2026)
+        // Carlos: «habrá como una especie de comunidad, y saldrá la gente que
+        // pertenece a este gimnasio: tiene estas rutinas en este gimnasio y
+        // estas máquinas». La ficha de un gimnasio de OTRO ya las enseñaba; la
+        // del tuyo —que es la que abres cada día— no, y era la misma llamada.
+        social.rutinasDeGimnasio(idPub),
+      ]);
+      const yo = (mios.gimnasios || []).find((g) => g.id === idPub);
+      const compito = !!(yo && yo.compite);
+      const mejores = mejoresDeGimnasio(gimnasio.id);
+
+      zona.innerHTML = `
+        <div class="ficha">
+          <p class="campo-nota" style="margin-top:0">
+            ${compito
+              ? `Sales en las clasificaciones de este gimnasio con <b>${mejores.length}</b>
+                 ${mejores.length === 1 ? 'máquina' : 'máquinas'}.`
+              : 'No sales en las clasificaciones. Nadie ve tus pesos.'}</p>
+          <div class="botonera">
+            <button class="boton ${compito ? 'boton-2' : ''}" id="gs-competir">
+              ${compito ? 'Salirme de las clasificaciones' : 'Entrar en las clasificaciones'}</button>
+            ${compito ? '<button class="boton boton-2" id="gs-subir">Actualizar mis marcas</button>' : ''}
+          </div>
+          <p class="campo-nota">Si entras se publica <b>un número por máquina</b>: el peso más alto
+            que has levantado en cada una. Ni cuándo entrenas, ni cuántas veces, ni tu historial.
+            Al salirte se borra lo subido.</p>
+        </div>
+
+        <h4 class="pf-familia">Quién entrena aquí (${(ms.miembros || []).length})</h4>
+        ${(ms.miembros || []).length
+          ? `<div class="lista-elegible">${ms.miembros.map((x) => `
+              <button class="pf-elegible fila-elegible" data-alias="${esc(x.alias)}">
+                <span class="fila-elegible-t">${esc(x.alias_visible || x.alias)}</span>
+                <span class="fila-elegible-s">${esc(x.nombre || '')}${
+                  x.compite ? ' · en la clasificación' : ''}</span>
+              </button>`).join('')}</div>`
+          : '<p class="grafica-vacia">Todavía no hay nadie más. Manda el enlace del gimnasio a quien vaya contigo.</p>'}
+
+        <h4 class="pf-familia">Clasificaciones</h4>
+        ${(mq.maquinas || []).length
+          ? `<div class="lista-elegible">${mq.maquinas.map((x) => `
+              <button class="pf-elegible fila-elegible" data-maq="${esc(x.maquina)}">
+                <span class="fila-elegible-t">${esc(x.maquina_n)}</span>
+                <span class="fila-elegible-s">${x.cuantos} personas · mejor ${redondear(x.mejor, 1)} kg</span>
+              </button>`).join('')}</div>`
+          : `<p class="grafica-vacia">Hace falta que al menos <b>dos personas</b> de este gimnasio
+             estén en la clasificación de la misma máquina. Con una sola no hay clasificación:
+             sería enseñarte a ti mismo en el primer puesto de una lista de uno.</p>`}
+
+        <h4 class="pf-familia">Lo que entrena su gente (${(rt.rutinas || []).length})</h4>
+        ${(rt.rutinas || []).length
+          ? `<div class="lista-elegible">${rt.rutinas.map((x) => `
+              <button class="pf-elegible fila-elegible" data-rut="${x.id}">
+                <span class="fila-elegible-t">${esc(x.nombre)}</span>
+                <span class="fila-elegible-s">${esc(x.alias_visible || x.alias)} · ${x.dias}
+                  ${x.dias === 1 ? 'día' : 'días'}${x.n_likes ? ` · ${x.n_likes} me gusta` : ''}</span>
+              </button>`).join('')}</div>`
+          : '<p class="grafica-vacia">Nadie de aquí ha publicado una rutina todavía.</p>'}
+        <!-- CÓMO ENTRA UNA RUTINA AQUÍ: publicándola siendo miembro. No hay un
+             botón de «añadirla a este gimnasio» porque no hace falta uno: la
+             rutina no se cuelga de un sitio, se cuelga de TI, y sale en los
+             gimnasios a los que perteneces. Un botón por gimnasio te obligaría
+             a publicar la misma rutina tres veces. -->
+        <p class="campo-nota">Tus rutinas publicadas salen aquí solas, porque entrenas
+          aquí. Se publican desde <b>Plan</b>, en cada día de entreno.</p>
+        <button class="boton boton-2" id="gs-publicar">${icono('mas', 16)} Publicar una rutina mía</button>`;
+
+      $$('.fila-elegible[data-alias]', zona).forEach((b) => (b.onclick = () =>
+        abrirPerfilAjeno(b.dataset.alias)));
+      $$('.fila-elegible[data-maq]', zona).forEach((b) => (b.onclick = () =>
+        abrirClasificacion(idPub, b.dataset.maq, gimnasio.nombre)));
+      $$('.fila-elegible[data-rut]', zona).forEach((b) => (b.onclick = () => {
+        const x = (rt.rutinas || []).find((y) => y.id === b.dataset.rut);
+        if (x) llevarseRutinaPublicada(x);
+      }));
+      $('#gs-publicar', zona).onclick = () => { cerrar(); irA('plan'); };
+
+      $('#gs-competir', zona).onclick = async () => {
+        if (compito) {
+          if (!await preguntar('¿Salirte de las clasificaciones?\n\nSe borran tus marcas publicadas '
+            + 'de este gimnasio. Lo que tienes apuntado en el móvil no se toca.')) return;
+          await social.salirDeGimnasio(idPub);
+          await social.entrarEnGimnasio(idPub, false);
+          aviso('Fuera. Tus marcas ya no se ven');
+        } else {
+          if (!await preguntar(`¿Publicar tus mejores pesos de ${mejores.length} máquinas?\n\n`
+            + 'Solo el peso más alto de cada una. Puedes salirte cuando quieras.')) return;
+          const r = await social.entrarEnGimnasio(idPub, true);
+          if (!r.ok) return aviso(r.motivo, 3400);
+          const r2 = await social.publicarRecords(idPub, mejores);
+          aviso(r2.ok ? `Publicadas ${r2.subidos} marcas` : r2.motivo, 3200);
+        }
+        pintar();
+      };
+
+      const bSubir = $('#gs-subir', zona);
+      if (bSubir) bSubir.onclick = async () => {
+        const r = await social.publicarRecords(idPub, mejores);
+        aviso(r.ok ? `Actualizadas ${r.subidos} marcas` : r.motivo, 3200);
+      };
+    }
+  );
+}
+
+async function abrirClasificacion(gimnasioPub, maquina, nombreGym) {
+  const r = await social.clasificacion(gimnasioPub, maquina, 50);
+  if (!r.ok) return aviso(r.motivo, 3200);
+  const mio = (perfilActual().alias || '').toLowerCase();
+  hoja(
+    `${maquina} · ${nombreGym}`,
+    `<p class="campo-nota" style="margin-top:0">Peso de placa, no 1RM estimado: una clasificación
+       tiene que poder discutirse mirando el hierro. A igualdad de peso, manda quien hizo más
+       repeticiones.</p>
+     <div class="lista">${r.puestos.map((x) => `
+       <div class="pf-fila ${x.alias === mio ? 'clas-yo' : ''}">
+         <span class="clas-puesto">${x.puesto}</span>
+         <div class="pf-fila-texto">
+           <div class="pf-fila-nombre">${esc(x.alias_visible || x.alias)}</div>
+           <div class="pf-fila-detalle">${esc(x.nombre || '')}</div>
+         </div>
+         <span class="plan-objetivo">${redondear(x.kg, 1)} kg × ${x.reps}</span>
+       </div>`).join('')}</div>`,
+    () => {}
+  );
+}
+
+/* ==========================================================================
+ * LAS RUTINAS DE LA GENTE  (v0.16.0)
+ *
+ * Carlos: *«que se puedan dar likes a las rutinas, poner comentarios, dar likes
+ * y que salga en el perfil (…) las rutinas creadas»*.
+ *
+ * El paquete que se publica es EXACTAMENTE el mismo que viaja en un enlace de
+ * WhatsApp: por nombres, nunca por ids del móvil de nadie. Así una rutina de la
+ * lista se importa con el mismo código y las mismas comprobaciones que una que
+ * te manda un amigo, y no hay dos caminos que puedan separarse.
+ * ========================================================================== */
+
+function abrirRutinasComunidad() {
+  let orden = 'populares';
+  hoja(
+    'Rutinas de la gente',
+    `<div class="chips" role="tablist">
+       <button class="chip" data-orden="populares" role="tab">Populares</button>
+       <button class="chip" data-orden="nuevas" role="tab">Nuevas</button>
+       <button class="chip" data-orden="amigos" role="tab">De quien sigo</button>
+     </div>
+     <div class="campo">
+       <input type="search" id="rc-buscar" enterkeyhint="search" autocomplete="off"
+              placeholder="Buscar por nombre" aria-label="Buscar rutinas">
+     </div>
+     <div id="rc-lista" aria-live="polite"><p class="grafica-vacia">Cargando…</p></div>`,
+    (cuerpo) => {
+      const zona = $('#rc-lista', cuerpo);
+      const caja = $('#rc-buscar', cuerpo);
+      let reloj = null;
+
+      const cargar = async () => {
+        zona.innerHTML = '<p class="grafica-vacia">Cargando…</p>';
+        const r = await social.rutinasPopulares({
+          orden, texto: caja.value.trim() || null, cuantos: 30,
+        });
+        if (!r.ok) { zona.innerHTML = `<p class="grafica-vacia">${esc(r.motivo)}</p>`; return; }
+        if (!r.rutinas.length) {
+          zona.innerHTML = orden === 'amigos'
+            ? '<p class="grafica-vacia">La gente a la que sigues no ha publicado ninguna todavía.</p>'
+            : '<p class="grafica-vacia">Todavía no hay rutinas publicadas. Publica la tuya desde Plan y serás el primero.</p>';
+          return;
+        }
+        zona.innerHTML = r.rutinas.map((x) => `
+          <article class="rc-tarjeta">
+            <header class="rc-cabeza">
+              <div>
+                <h4 class="rc-nombre">${esc(x.nombre)}</h4>
+                <p class="rc-autor">${x.oficial
+                    ? '<span class="rc-oficial">La trae la app</span>'
+                    : esc(x.alias_visible || x.alias)} · ${x.dias}
+                  ${x.dias === 1 ? 'día' : 'días'} · ${esc(NIVEL_RUTINA[x.nivel] || x.nivel)}</p>
+              </div>
+              <button class="rc-like ${x.le_di ? 'dado' : ''}" data-id="${x.id}"
+                      aria-pressed="${!!x.le_di}" aria-label="Me gusta">
+                ${icono('corazon', 18)}<span>${x.n_likes}</span></button>
+            </header>
+            ${x.descripcion ? `<p class="rc-desc">${esc(x.descripcion)}</p>` : ''}
+            ${x.porQueSin ? `<p class="rc-salta">${esc(x.porQueSin)}</p>` : ''}
+            <footer class="rc-pie">
+              <button class="boton-plano rc-com" data-id="${x.id}">
+                ${x.n_comentarios} ${x.n_comentarios === 1 ? 'comentario' : 'comentarios'}</button>
+              ${/* Cuántas PERSONAS se la han llevado. Solo si hay alguna: un
+                    «0 copias» es verdad pero se lee como «esto no le sirve a
+                    nadie», y lo que pasa es que la app acaba de nacer. Y no se
+                    infla: el contador lo lleva la base, una por cuenta. */
+                x.n_copias
+                  ? `<span class="rc-copias">${x.n_copias} se la
+                     ${x.n_copias === 1 ? 'ha' : 'han'} llevado</span>` : ''}
+              ${/* Una rutina oficial no es de nadie, así que no hay perfil que
+                    abrir: el botón llevaría a una pantalla vacía. */
+                x.oficial ? ''
+                  : `<button class="boton-plano rc-autor-b" data-alias="${esc(x.alias)}">Ver perfil</button>`}
+              <button class="boton-plano rc-llevar" data-id="${x.id}">Llevármela</button>
+            </footer>
+          </article>`).join('');
+
+        $$('.rc-like', zona).forEach((b) => (b.onclick = async () => {
+          if (!nube.usuario()) return abrirCuenta();
+          const cuenta = $('span', b);
+          b.disabled = true;
+          const r2 = await social.marcarRutina(b.dataset.id);
+          b.disabled = false;
+          if (!r2.ok) return aviso(r2.motivo, 3200);
+          b.classList.toggle('dado', r2.marcada);
+          b.setAttribute('aria-pressed', String(r2.marcada));
+          cuenta.textContent = String(Number(cuenta.textContent) + (r2.marcada ? 1 : -1));
+        }));
+        $$('.rc-com', zona).forEach((b) => (b.onclick = () => abrirComentarios(b.dataset.id)));
+        $$('.rc-autor-b', zona).forEach((b) => (b.onclick = () => abrirPerfilAjeno(b.dataset.alias)));
+        $$('.rc-llevar', zona).forEach((b) => (b.onclick = () => {
+          const x = r.rutinas.find((y) => y.id === b.dataset.id);
+          llevarseRutinaPublicada(x);
+        }));
+      };
+
+      $$('[data-orden]', cuerpo).forEach((b) => (b.onclick = () => {
+        orden = b.dataset.orden;
+        $$('[data-orden]', cuerpo).forEach((x) => x.setAttribute('aria-pressed', x.dataset.orden === orden));
+        cargar();
+      }));
+      $$('[data-orden]', cuerpo).forEach((x) => x.setAttribute('aria-pressed', x.dataset.orden === orden));
+      caja.oninput = () => { clearTimeout(reloj); reloj = setTimeout(cargar, 320); };
+      cargar();
+    }
+  );
+}
+
+const NIVEL_RUTINA = {
+  empiezo: 'para empezar', medio: 'nivel medio', avanzado: 'avanzada', cualquiera: 'para cualquiera',
+};
+
+/**
+ * Trae el paquete de la rutina publicada y lo mete por el camino de siempre.
+ *
+ * Una sola llamada: `copiarRutina` devuelve el paquete Y cuenta la copia. Antes
+ * eran dos —pedir `datos` por PostgREST y luego avisar de la copia— y el
+ * contador se podía subir sin llevarse nada.
+ */
+async function llevarseRutinaPublicada(x) {
+  if (!x) return;
+  const r = await social.copiarRutina(x.id);
+  if (!r.ok) return aviso(r.motivo || 'No pude traer esa rutina', 3200);
+  const v = comp.validar(r.paquete);
+  if (!v.ok) return aviso(v.motivo, 3400);
+  hojaImportarRutina(v.paquete);
+}
+
+function abrirComentarios(rutinaId) {
+  hoja(
+    'Comentarios',
+    `<div id="cm-lista" aria-live="polite"><p class="grafica-vacia">Cargando…</p></div>
+     <div class="campo">
+       <label for="cm-texto">Escribe algo</label>
+       <textarea id="cm-texto" rows="3" maxlength="500" placeholder="¿Qué te ha parecido?"></textarea>
+     </div>
+     <button class="boton" id="cm-enviar">Comentar</button>`,
+    (cuerpo) => {
+      const zona = $('#cm-lista', cuerpo);
+      const caja = $('#cm-texto', cuerpo);
+
+      const cargar = async () => {
+        const r = await social.comentariosDe(rutinaId, 50);
+        if (!r.ok) { zona.innerHTML = `<p class="grafica-vacia">${esc(r.motivo)}</p>`; return; }
+        zona.innerHTML = r.comentarios.length
+          ? `<div class="lista">${r.comentarios.map((c) => `
+              <div class="pf-fila">
+                <div class="pf-fila-texto">
+                  <div class="pf-fila-nombre">${esc(c.alias_visible || c.alias)}</div>
+                  <div class="cm-texto">${esc(c.texto)}</div>
+                </div>
+                ${c.es_mio ? `<button class="boton-plano cm-borrar" data-id="${c.id}"
+                   aria-label="Borrar mi comentario">${icono('papelera', 18)}</button>` : ''}
+              </div>`).join('')}</div>`
+          : '<p class="grafica-vacia">Sé el primero.</p>';
+        $$('.cm-borrar', zona).forEach((b) => (b.onclick = async () => {
+          await social.borrarComentario(b.dataset.id);
+          cargar();
+        }));
+      };
+      cargar();
+
+      $('#cm-enviar', cuerpo).onclick = async () => {
+        if (!nube.usuario()) return abrirCuenta();
+        const r = await social.comentar(rutinaId, caja.value);
+        if (!r.ok) return aviso(r.motivo, 3400);
+        caja.value = '';
+        cargar();
+      };
+    }
+  );
+}
+
 const VISTAS = {
   entrenar: { titulo: 'Entrenar', pintar: pintarEntrenar },
   progreso: { titulo: 'Progreso', pintar: pintarProgreso },
   nutricion: { titulo: 'Nutrición', pintar: pintarNutricion },
-  gimnasios: { titulo: 'Gimnasios', pintar: pintarGimnasios },
+  plan: { titulo: 'Plan', pintar: pintarPlan },
+  // Perfil ocupa el hueco que tenía Ajustes en la barra, por el mismo criterio
+  // con el que Gimnasios salió de ella en la 0.11.0: en la barra van los cinco
+  // sitios que se usan A DIARIO. Los ajustes se tocan una vez al año, así que
+  // se llega a ellos desde el perfil — que es donde los busca cualquiera que
+  // haya usado Instagram o Strava.
+  perfil: { titulo: 'Perfil', pintar: pintarPerfil },
+  // El vestuario no tiene botón en la barra: se llega desde el perfil, que es
+  // lo que se está personalizando. En la barra van los cinco sitios de uso
+  // DIARIO y este no lo es — se entra cuando hay una caja esperando.
+  vestuario: { titulo: 'Vestuario', pintar: pintarVestuarioVista },
   ajustes: { titulo: 'Ajustes', pintar: pintarAjustes },
+  // Gimnasios ya no tiene botón propio en la barra: son cinco sitios y el
+  // quinto lo ocupa ahora el Plan, que se usa a diario. Se llega desde el
+  // selector de gimnasio de la cabecera, que es donde uno lo busca.
+  gimnasios: { titulo: 'Gimnasios', pintar: pintarGimnasios },
 };
 
-function irA(vista) {
+/* --------------------------------------------------------------------------
+ * CAMBIAR DE PESTAÑA
+ *
+ * La pantalla entra por el lado del que viene. Sin eso, cambiar de pestaña es
+ * un parpadeo y no se entiende que te has movido: el orden de la barra deja de
+ * significar nada. Y se acompaña de un toque de vibración de 8 ms, que es lo
+ * que hace que un botón de cristal se sienta como un botón.
+ * ------------------------------------------------------------------------ */
+const ORDEN_VISTAS = ['entrenar', 'progreso', 'nutricion', 'plan', 'ajustes'];
+
+function tocar(ms = 8) {
+  // `vibrate` no existe en un navegador de escritorio y en el móvil puede estar
+  // apagada: se intenta y punto, nunca se deja caer la app por esto.
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch { /* da igual */ }
+}
+
+function irA(vista, { avisar = true } = {}) {
+  if (vista === S.vista) return;
+  const antes = ORDEN_VISTAS.indexOf(S.vista);
+  const ahora = ORDEN_VISTAS.indexOf(vista);
+  S.direccion = ahora > antes ? 'derecha' : 'izquierda';
+  // Solo AQUÍ se enciende la transición. Antes se animaba en cada `pintar()`,
+  // así que la pantalla se deslizaba también al guardar una serie o al cerrar
+  // una hoja: una animación que pasa siempre no significa nada, y encima
+  // estorba. Se gasta al pintar y se apaga sola.
+  S.transicion = true;
+  // Entrar en Plan siempre empieza por HOY: si se quedara en el día que miraste
+  // el martes, abrirías la pestaña y verías el detalle del día equivocado.
+  if (vista === 'plan') _diaElegido = null;
   S.vista = vista;
+  if (avisar) tocar();
   pintar();
+}
+
+/**
+ * La copia de la pantalla que se va, para poder cruzarla con la que entra.
+ *
+ * POR QUÉ UNA COPIA Y NO LA PANTALLA DE VERDAD: toda la app vive en UN solo
+ * `<main id="vista">` que se vacía y se vuelve a llenar. Para que dos pantallas
+ * se muevan a la vez tiene que haber dos elementos, y el segundo no puede ser
+ * el bueno —lo necesitamos para pintar la nueva—. Así que se clona, se anima la
+ * copia y se tira.
+ *
+ * Va con `position: fixed` sobre el hueco que ocupaba la vista, y por DEBAJO de
+ * la cabecera (z-index 20 contra 30): así se mete debajo de la cabecera igual
+ * que hace la pantalla de verdad al desplazarse, en vez de pasarle por encima.
+ *
+ * `scrollTop` se copia DESPUÉS de meterlo en el documento: un elemento que
+ * todavía no tiene caja no se puede desplazar, y la copia saldría desde arriba
+ * aunque estuvieras a mitad de la lista.
+ */
+const LIMITE_CLON = 900;   // nodos: más que esto y el clon costaría un fotograma
+
+function fantasmaDeSalida(raiz) {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (raiz.querySelectorAll('*').length > LIMITE_CLON) return;
+
+  const caja = raiz.getBoundingClientRect();
+  if (!caja.width || !caja.height) return;
+  const desplazado = raiz.scrollTop;
+
+  const f = raiz.cloneNode(true);
+  f.removeAttribute('id');
+  f.setAttribute('aria-hidden', 'true');
+  f.classList.remove('cambia', 'desde-derecha', 'desde-izquierda');
+  f.classList.add('vista-fantasma', S.direccion === 'derecha' ? 'sale-izquierda' : 'sale-derecha');
+  f.style.cssText = `position:fixed;left:${caja.left}px;top:${caja.top}px;` +
+    `width:${caja.width}px;height:${caja.height}px;margin:0;z-index:20;pointer-events:none;`;
+  // UN `<canvas>` NO SE CLONA CON SU DIBUJO DENTRO. `cloneNode` copia el
+  // elemento y sus atributos, pero el mapa de bits se queda en el original: sin
+  // esto, la pantalla que se va enseñaría rectángulos vacíos donde estaban las
+  // piezas. Se copian a mano, que son cuatro y cuesta un `drawImage`.
+  const origen = raiz.querySelectorAll('canvas');
+  const copia = f.querySelectorAll('canvas');
+  for (let i = 0; i < copia.length && i < origen.length; i++) {
+    const a = origen[i]; const b = copia[i];
+    if (!a.width || !a.height) continue;
+    b.width = a.width; b.height = a.height;
+    try { b.getContext('2d').drawImage(a, 0, 0); } catch { /* lienzo sucio, da igual */ }
+  }
+  document.body.appendChild(f);
+  f.scrollTop = desplazado;
+
+  const fuera = () => f.remove();
+  f.addEventListener('animationend', fuera);
+  // Red de seguridad: si la animación no llega a dispararse (pestaña en
+  // segundo plano, por ejemplo) el fantasma se quedaría tapando la app.
+  setTimeout(fuera, 700);
 }
 
 export function pintar() {
   limpiarUrls();
   const v = VISTAS[S.vista] || VISTAS.entrenar;
 
+  // El gimnasio ya no es un <select> del sistema: es un botón que enseña el
+  // nombre y abre una hoja. Un <select> nativo en Android sale con la letra y
+  // el gris del fabricante, y era una de las piezas que cantaban «2010».
   const sel = $('#gym-selector');
   if (sel) {
-    sel.innerHTML = S.cache.gimnasios.map((g) => `<option value="${g.id}" ${g.id === S.gimnasioId ? 'selected' : ''}>${esc(g.nombre)}</option>`).join('');
+    const gim = S.cache.gimnasios.find((g) => g.id === S.gimnasioId);
+    $('span', sel).textContent = gim ? gim.nombre : 'Elegir gimnasio';
     sel.classList.toggle('oculto', S.vista !== 'entrenar' && S.vista !== 'progreso');
   }
-  $('#titulo-vista').textContent = v.titulo;
+  // El título acompaña al empujón. Sin esto, la cabecera ya pone «Progreso»
+  // mientras en pantalla se sigue viendo «Entrenar» yéndose: el título va por
+  // delante de la app y se nota.
+  const tit = $('#titulo-vista');
+  tit.textContent = v.titulo;
+  if (S.transicion) {
+    tit.classList.remove('titulo-cambia');
+    void tit.offsetWidth;
+    tit.classList.add('titulo-cambia');
+  }
 
   const raiz = $('#vista');
+  /* EL BOTE DE LA BARRA DE ABAJO (Carlos, 29-ago-2026: «la barra pega un bote
+   * arriba y abajo y se queda abajo»).
+   *
+   * Pasaba así: estando la pantalla bajada, al cambiar de pestaña se vaciaba la
+   * vista PRIMERO. En ese instante el documento se quedaba en cuatro dedos de
+   * alto con la página desplazada 700 px, así que el navegador recolocaba el
+   * desplazamiento Y reajustaba el alto de la ventana (`innerHeight` pasaba de
+   * 915 a 973 y volvía). La barra de abajo está anclada a ESA ventana: se iba
+   * hacia abajo y volvía. Y si la pestaña nueva era corta, se quedaba fuera.
+   *
+   * La cura son dos cosas, y ninguna es una animación:
+   *  1. Subir arriba ANTES de vaciar, no después: así el documento nunca se
+   *     queda corto y desplazado a la vez.
+   *  2. Que la vista tenga un alto mínimo (en el CSS), para que el documento no
+   *     encoja de golpe al cambiar de una pestaña larga a una corta.
+   */
+  // El cruce: la pantalla que se va sale por su lado mientras la nueva entra
+  // por el suyo. Hay que sacar la copia ANTES de vaciar, claro.
+  const cruzando = S.transicion;
+  S.transicion = false;
+  if (cruzando) fantasmaDeSalida(raiz);
+
+  raiz.scrollTop = 0;
+  _scrollAnterior = 0;
+  // LOS LIENZOS DE ESTA VISTA SE SUELTAN ANTES DE VACIAR. Si no, sus escenas
+  // se quedarían en el motor apuntando a elementos que ya no están en el
+  // documento: seguirían contando como visibles y pintando para nadie. Es la
+  // versión de canvas de la fuga que ya tuvimos con los `blob:`.
+  //
+  // Y se sueltan SOLO los de `raiz`: puede haber una hoja abierta con piezas
+  // dentro, y soltarlo todo la dejaría con los dibujos congelados. Lo que se
+  // escape por otro camino lo recoge `podar()` en el siguiente montaje.
+  MOT.motor.desmontar(raiz);
   raiz.innerHTML = '';
+  // Se quita y se vuelve a poner para que la animación arranque otra vez: sin
+  // esto, cambiar de pestaña por segunda vez no movía nada.
+  raiz.classList.remove('cambia', 'desde-derecha', 'desde-izquierda');
+  void raiz.offsetWidth;
+  if (cruzando) {
+    raiz.classList.add('cambia', S.direccion === 'izquierda' ? 'desde-izquierda' : 'desde-derecha');
+  }
   v.pintar(raiz);
+  // Y aquí se enganchan los de la pantalla nueva. El motor se salta los que ya
+  // están montados, así que llamar de más no cuesta nada.
+  MOT.motor.montar(raiz, COS.pintorDe);
 
   $$('.nav-boton').forEach((b) => {
     if (b.dataset.vista === S.vista) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  window.scrollTo(0, 0);
+  ponerFab();
+  animarEntrada(raiz);
+  // Si se ha ganado algo desde la última pantalla, se celebra AQUÍ: cuando ya
+  // no hay ninguna hoja abierta que tapar.
+  mostrarLogrosPendientes();
+  try { history.replaceState(null, '', `#${S.vista}`); } catch { /* file:// no deja */ }
+  cabeceraSegunScroll();
+}
+
+/* --------------------------------------------------------------------------
+ * EL BOTÓN FLOTANTE
+ *
+ * Una sola acción por pantalla, la que se hace de verdad, y siempre al alcance
+ * del pulgar. Antes esas acciones eran tres botones apilados AL FINAL de la
+ * lista: para añadir una máquina había que recorrer las que ya tienes.
+ * ------------------------------------------------------------------------ */
+const FAB = {
+  entrenar: { texto: 'Añadir', accion: () => menuAnadirMaquina() },
+  gimnasios: { texto: 'Gimnasio', accion: () => editarGimnasio(null) },
+  plan: { texto: 'Objetivo', accion: () => editarMeta(null) },
+};
+
+function ponerFab() {
+  const fab = $('#fab');
+  if (!fab) return;
+  const cfg = FAB[S.vista];
+  fab.classList.toggle('oculto', !cfg);
+  if (!cfg) return;
+  const cambia = $('.fab-texto', fab).textContent !== cfg.texto;
+  $('.fab-texto', fab).textContent = cfg.texto;
+  fab.onclick = cfg.accion;
+  // Solo cuando la acción CAMBIA de verdad: si en las dos pestañas pone
+  // «Añadir», dar un brinco por nada llama la atención sobre nada.
+  if (cambia) {
+    fab.classList.remove('fab-brinca');
+    void fab.offsetWidth;
+    fab.classList.add('fab-brinca');
+  }
+}
+
+/** Las tres formas de meter una máquina, en una hoja en vez de en tres botones. */
+function menuAnadirMaquina() {
+  const flojo = sesionHoyExcluida();
+  hoja('Añadir a este gimnasio', `
+    <div class="hoja-lista">
+      <button class="hoja-op" data-op="catalogo">${icono('lupa', 20)}
+        <span>Del catálogo<small>1.365 ejercicios con figura y técnica</small></span></button>
+      <button class="hoja-op" data-op="mano">${icono('lapiz', 20)}
+        <span>Crear una a mano<small>para una máquina rara de tu gimnasio</small></span></button>
+      <button class="hoja-op" data-op="flojo">${icono('reloj', 20)}
+        <span>${flojo ? 'Hoy ya está marcado como día flojo' : 'Marcar hoy como día flojo'}
+        <small>${flojo ? 'toca para que vuelva a contar' : 'no contará en las gráficas'}</small></span></button>
+    </div>`, (cuerpo, cerrar) => {
+    $$('[data-op]', cuerpo).forEach((b) => (b.onclick = () => {
+      cerrar();
+      if (b.dataset.op === 'catalogo') abrirCatalogo();
+      else if (b.dataset.op === 'mano') editarMaquina(null);
+      else alternarDiaFlojo();
+    }));
+  });
+}
+
+/** La lista de gimnasios, en una hoja. */
+function abrirSelectorGym() {
+  hoja('¿En qué gimnasio estás?', `
+    <div class="hoja-lista">
+      ${S.cache.gimnasios.map((g) => {
+        const n = S.cache.maquinas.filter((m) => m.gimnasioId === g.id).length;
+        return `<button class="hoja-op" data-gym="${g.id}" aria-current="${g.id === S.gimnasioId}">
+          <span>${esc(g.nombre)}<small>${n} ${n === 1 ? 'máquina' : 'máquinas'}${g.direccion ? ` · ${esc(g.direccion)}` : ''}</small></span>
+          ${g.id === S.gimnasioId ? icono('tic', 20) : ''}</button>`;
+      }).join('')}
+    </div>
+    <button class="boton boton-2" id="gestionar-gyms" style="margin-top:14px">Añadir o editar gimnasios</button>`,
+    (cuerpo, cerrar) => {
+    $$('[data-gym]', cuerpo).forEach((b) => (b.onclick = async () => {
+      S.gimnasioId = b.dataset.gym;
+      await db.ponAjuste('ultimo_gym', S.gimnasioId);
+      cerrar();
+      tocar();
+      pintar();
+    }));
+    $('#gestionar-gyms', cuerpo).onclick = () => {
+      cerrar();
+      irA('gimnasios');
+    };
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * LA CABECERA QUE ENCOGE
+ *
+ * Arriba del todo manda el título grande; en cuanto se baja, se aparta y deja
+ * la pantalla para el contenido. El botón flotante hace lo mismo: se queda en
+ * icono para no tapar la lista mientras se recorre.
+ * ------------------------------------------------------------------------ */
+/**
+ * Deslizar el dedo para cambiar de pestaña.
+ *
+ * REGLAS QUE NO SE SALTAN (o el gesto se vuelve un incordio):
+ *  · Solo cuenta si el movimiento es CLARAMENTE horizontal (más del doble que
+ *    el vertical). Si no, arrastrar la lista hacia abajo cambiaría de pestaña.
+ *  · No cuenta encima de nada que se desplace de lado por su cuenta (los chips,
+ *    la tira de platos, las gráficas): ahí el dedo ya tiene dueño.
+ *  · No cuenta con una hoja abierta.
+ *  · 60 px de recorrido mínimo. Menos que eso es un toque tembloroso.
+ */
+function gestoDeslizar() {
+  const zona = document.body;
+  let x0 = 0, y0 = 0, valido = false;
+  zona.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return (valido = false);
+    const t = e.touches[0];
+    valido = !e.target.closest('.chips, .platos-fila, .grafica-svg, .hoja-fondo, .nut-resultados, input, textarea, select');
+    x0 = t.clientX;
+    y0 = t.clientY;
+  }, { passive: true });
+  zona.addEventListener('touchend', (e) => {
+    if (!valido) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0;
+    const dy = t.clientY - y0;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return;
+    const i = ORDEN_VISTAS.indexOf(S.vista);
+    const siguiente = ORDEN_VISTAS[dx < 0 ? i + 1 : i - 1];
+    if (siguiente) irA(siguiente);
+  }, { passive: true });
+}
+
+let _scrollAnterior = 0;
+
+function cabeceraSegunScroll() {
+  const zona = $('#vista');
+  const y = zona ? zona.scrollTop : 0;
+  const cab = document.querySelector('.cabecera');
+  if (cab) cab.classList.toggle('encogida', y > 12);
+
+  const fab = $('#fab');
+  if (fab) {
+    // Encogido a icono en cuanto se baja un poco, y ESCONDIDO del todo mientras
+    // se sigue bajando: en una lista de máquinas el botón flotante tapaba
+    // justo el «+» de una de las filas. Al subir vuelve, que es cuando se
+    // busca. Es lo que hace cualquier app decente y se nota en cuanto falta.
+    fab.classList.toggle('encogido', y > 120);
+    const bajando = y > _scrollAnterior + 4 && y > 220;
+    const subiendo = y < _scrollAnterior - 4;
+    if (bajando) fab.classList.add('escondido');
+    else if (subiendo || y < 120) fab.classList.remove('escondido');
+  }
+  _scrollAnterior = y;
+}
+
+/* --------------------------------------------------------------------------
+ * LAS CIFRAS SUBEN CONTANDO
+ *
+ * Solo las de titular (las calorías del día, el peso de la gráfica, el volumen
+ * del periodo). Animar TODOS los números sería una feria y encima se leería
+ * peor: el ojo no puede leer una cifra que cambia mientras la buscas.
+ *
+ * Se anima con `requestAnimationFrame` y no con transiciones de CSS porque lo
+ * que cambia es el TEXTO, no un estilo. Y si el sistema pide menos movimiento,
+ * se escribe el número final y ya está.
+ * ------------------------------------------------------------------------ */
+function contarHasta(el, valor, { decimales = 0, prefijo = '', sufijo = '', ms = 620 } = {}) {
+  if (!el) return;
+  const escribe = (v) => {
+    el.textContent = prefijo + v.toLocaleString('es-ES', {
+      minimumFractionDigits: decimales, maximumFractionDigits: decimales,
+    }) + sufijo;
+  };
+  const quieto = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (quieto || !Number.isFinite(valor) || Math.abs(valor) < 0.01) return escribe(valor || 0);
+
+  const t0 = performance.now();
+  const paso = (ahora) => {
+    const t = Math.min(1, (ahora - t0) / ms);
+    // Frenada suave al final: la cifra llega, no choca.
+    escribe(valor * (1 - Math.pow(1 - t, 3)));
+    if (t < 1) requestAnimationFrame(paso);
+    else escribe(valor);
+  };
+  requestAnimationFrame(paso);
+}
+
+/* --------------------------------------------------------------------------
+ * LAS PELÍCULAS DEL VESTUARIO (0.37.0)
+ *
+ * Carlos, 5-sep-2026: *«haz que la primera vez que abras la app pues que se
+ * descarguen, si de esta manera tenemos acceso a herramientas de mejor calidad
+ * (…) ampliar el peso de la app a costa de poder ofrecer animaciones y
+ * contenidos de calidad»*.
+ *
+ * Cómo se hace sin romper la regla de que la app abre en un gimnasio sin
+ * cobertura: el pack ESTÁNDAR viaja dentro del APK y siempre está; esto solo
+ * baja el de ALTA, que es el mismo arte al doble de resolución y al doble de
+ * fotogramas. Si no hay red, no pasa nada — literalmente nada: no hay aviso, no
+ * hay reintento agresivo y no hay pantalla de carga. Se intenta otra vez al
+ * siguiente arranque.
+ *
+ * Va DESPUÉS de `pintar()` y no espera a nadie: son megas, y bloquear el
+ * arranque de la app por un adorno sería exactamente el error contrario.
+ * ------------------------------------------------------------------------ */
+async function bajarLosEfectos() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    const base = await comp.base();          // sale de `nube.json` → `web`
+    if (!base) return;
+    // SOLO LO QUE LLEVAS PUESTO. El pack entero son 127 MB y bajarlos sin
+    // preguntar sería gastarle la tarifa de datos a nadie. Lo puesto son tres
+    // piezas: lo justo para que TU perfil se vea bien también sin cobertura.
+    // El resto se pide al servidor cuando se mira, y para bajarlo todo está el
+    // botón de Ajustes, que sí dice lo que pesa.
+    const puesto = Object.values(vestuarioActual().puesto || {}).filter(Boolean);
+    const puestas = await PELIS.descargar(base, { soloEstas: puesto });
+    // Solo se repinta si de verdad ha llegado algo Y se está mirando el perfil,
+    // que es donde se ven las piezas. Repintar por sorpresa mientras Carlos
+    // apunta una serie sería peor que esperar al siguiente cambio de pantalla:
+    // el vestuario se abre encima y se pinta al abrirlo, así que ya las coge.
+    if (puestas > 0 && S.vista === 'perfil') pintar();
+  } catch { /* sin red o sin servidor: se queda el pack del APK */ }
 }
 
 export async function arrancar() {
+  // El navegador guarda dónde estabas y lo restaura al volver. Aquí las
+  // pantallas se pintan de cero, así que restaurar un desplazamiento viejo solo
+  // sirve para dar un salto raro. Lo llevamos nosotros.
+  try { history.scrollRestoration = 'manual'; } catch { /* WebView vieja */ }
+
+  // EL ENLACE COMPARTIDO SE LEE AQUÍ, LO PRIMERO DE TODO.
+  //
+  // `pintar()` reescribe la dirección con `#<vista>` en CADA pintada (es lo que
+  // hace que los accesos directos del icono funcionen). Si esperásemos al final
+  // de `arrancar` para mirar el `#`, la primera pintada ya se habría llevado por
+  // delante el `#/i/…` del enlace y la rutina compartida se perdería sin más:
+  // la app abría por Entrenar y nadie se enteraba de que había un enlace.
+  const enlaceDeEntrada = comp.leerHash(location.hash);
+  // Y LO QUE VUELVE DEL CORREO, por lo mismo y en el mismo sitio.
+  //
+  // Supabase rebota de la confirmación con el testigo detrás de la almohadilla
+  // (`#access_token=...&type=signup`). Si esto se leyera al final, la primera
+  // pintada se lo habría llevado por delante y la cuenta no se confirmaría
+  // nunca — que es exactamente lo que se veía: «no te deja confirmar el
+  // correo». Se lee aquí, antes que nada, y se atiende al final.
+  const vueltaDelCorreo = nube.leerVueltaDeCorreo(location.hash);
+
   await db.abrir();
+  // LAS PELÍCULAS DEL VESTUARIO, antes de pintar (0.37.0). `cosmeticos.js`
+  // decide al ESCRIBIR EL HTML si una pieza es una película o un lienzo, así
+  // que si esto llegara tarde la primera pintada saldría con los dibujos viejos
+  // y cambiarían al repintar. Es la misma razón por la que el catálogo y la
+  // sesión se cargan aquí y no después.
+  try {
+    await PELIS.recuperar();
+    // Y de dónde cuelga el pack grande, ANTES de la primera pintada: si llegara
+    // después, la tarjeta del perfil se pintaría con la película pequeña
+    // estirada y solo se arreglaría al repintar.
+    PELIS.fijarBase(await comp.base());
+  } catch { /* un adorno no tumba la app */ }
   // El catálogo (1.365 ejercicios) se carga ANTES de pintar: si llegara tarde,
   // la primera pintada saldría sin figuras y luego «saltarían» al aparecer.
   await cat.cargar();
+  // La sesión de la nube, también antes de pintar: si no, el perfil se dibuja
+  // un instante como «entra o crea una cuenta» aunque ya estés dentro, y ese
+  // parpadeo se lee como que te ha echado.
+  await nube.arrancar();
   aplicarTema((await db.ajuste('tema', 'oscuro')) || 'oscuro', await temaPropio());
+  // El sonido, antes de pintar nada: si se leyera después, la primera caja que
+  // se abriera sonaría aunque estuviese apagado.
+  SON.configurar({ sonido: !!(await db.ajuste(CLAVE_SONIDO, true)) });
+  _modoPersonal = !!(await db.ajuste(CLAVE_MODO_PERSONAL, false));
 
-  if (!(await db.todos('gimnasios')).length) await sembrarGimnasios();
-  await sembrarRutinas();
+  // LA BIENVENIDA DECIDE. Antes se sembraban aquí los TRES GIMNASIOS DE CARLOS
+  // (VivaGym Reus, Basic-Fit Tarradellas, La Cochera) a cualquiera que
+  // instalara la app. A Carlos le sirven; a un desconocido le dicen que se ha
+  // equivocado de app. Ahora, si toca enseñar la bienvenida, el gimnasio y los
+  // días los elige quien la abre, y la siembra no corre.
+  const tocaBienvenida = await BV.hayQueEnsenarla();
+  if (!tocaBienvenida) {
+    if (!(await db.todos('gimnasios')).length) await sembrarGimnasios();
+    await sembrarRutinas();
+  }
   // SIN `if`, y esa es la corrección. Antes solo sembraba con el almacén vacío,
   // así que a quien ya tenía alimentos (o sea, a Carlos) no le llegaba nunca
   // una ampliación de la base. `sembrarAlimentos` es idempotente y solo escribe
   // lo que de verdad cambia, así que se puede llamar en cada arranque.
   await sembrarAlimentos();
   await recargar();
+  // Los logros también se miran AL ARRANCAR, no solo al apuntar una serie: si
+  // los datos llegan de otro sitio (la sincronización con el PC, una copia
+  // restaurada), las insignias nuevas aparecen sin que aquí se haya apuntado
+  // nada, y nadie se enteraría.
+  await comprobarLogros();
+
+  // Los accesos directos del icono («apuntar una serie», «apuntar una comida»)
+  // llegan como #entrenar / #nutricion. Sin esto abrirían la app por donde
+  // toque y el acceso directo sería mentira.
+  const desdeElAtajo = (location.hash || '').replace('#', '');
+  if (VISTAS[desdeElAtajo]) S.vista = desdeElAtajo;
 
   $$('.nav-boton').forEach((b) => (b.onclick = () => irA(b.dataset.vista)));
-  const sel = $('#gym-selector');
-  sel.onchange = async () => {
-    S.gimnasioId = sel.value;
-    await db.ponAjuste('ultimo_gym', S.gimnasioId);
-    pintar();
-  };
+  $('#gym-selector').onclick = abrirSelectorGym;
+  gestoDeslizar();
+  // El oyente va en `.vista`, que es lo que se desplaza ahora (el cuerpo mide
+  // una pantalla exacta y se queda quieto). `passive` porque aquí no se cancela
+  // nada: sin él, Chrome avisa de que el oyente puede frenar el desplazamiento.
+  $('#vista').addEventListener('scroll', cabeceraSegunScroll, { passive: true });
 
   sync.alCambiarEstado((e) => {
     const chip = $('#estado-sync');
     if (!chip) return;
+    chip.setAttribute('role', 'status');
+    chip.setAttribute('aria-live', 'polite');
     if (e.estado === 'ok') {
       chip.className = 'estado-sync ok';
       chip.textContent = 'sincronizado';
@@ -4703,9 +10828,172 @@ export async function arrancar() {
     }
   });
 
+  // Un enlace compartido abierto con la app YA abierta (WhatsApp la trae al
+  // frente sin recargar) solo cambia el `#`, así que hay que escucharlo.
+  window.addEventListener('hashchange', () => {
+    const r = comp.leerHash(location.hash);
+    if (r) atenderEnlace(r);
+  });
+  nube.alCambiarSesion(() => {
+    if (S.vista === 'perfil') pintar();
+  });
+
+  // Dejar de mirar la pantalla es el último aviso de que igual no vuelves. Es
+  // el momento de subir lo que aún no está en la copia. `visibilitychange` y no
+  // `beforeunload`: en Android la app no se «descarga», se va al fondo.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') copiaAlSalir();
+  });
+
   pintar();
   sync.automatico();
   procesarFotosPendientes();
+  bajarLosEfectos();
+
+  // A dónde vuelven los correos de Supabase: la misma dirección pública de la
+  // que cuelgan los enlaces compartidos.
+  nube.fijarDondeVuelve(await comp.base());
+
+  // Al final: primero que la app esté en pie y luego se pregunta si quiere
+  // importar. Al revés, la hoja saldría sobre una pantalla a medias.
+  if (vueltaDelCorreo) await atenderVueltaDelCorreo(vueltaDelCorreo);
+
+  // LA PUERTA VA DELANTE DE LA BIENVENIDA, y ese orden es el arreglo.
+  //
+  // Antes la bienvenida te pedía el nombre, el gimnasio y los días ANTES de
+  // saber quién eras, así que después, al crear la cuenta, te volvía a pedir el
+  // nombre y el usuario. Carlos: «te sale sin nombre, como si no estuviese
+  // configurado, y te hace volver a meter el nombre, el usuario, las
+  // anotaciones». Primero la cuenta; la bienvenida ya la reconoce.
+  if (await hayQuePasarPorLaPuerta()) {
+    return abrirPuerta(async () => {
+      await recargar();
+      pintar();
+      // Se vuelve a preguntar: si has entrado con una cuenta que tenía copia,
+      // la bienvenida YA está hecha y volver a enseñarla sería tratarte de
+      // nuevo cuando llevas dos años apuntando.
+      if (await BV.hayQueEnsenarla()) return abrirBienvenida();
+      atenderEnlace(enlaceDeEntrada);
+      copiaAutomatica();
+    });
+  }
+  // Con sesión ya guardada: la copia se intenta calladamente, y si no toca o no
+  // hay red no pasa nada. Nunca bloquea el arranque.
+  copiaAutomatica();
+  /* Y SI AQUÍ NO HAY NADA TUYO, LA COPIA SE OFRECE OTRA VEZ.  (0.31.0)
+   *
+   * `trasEntrar()` solo corre cuando se entra de verdad. Si aquel día no había
+   * red —o si la copia no llegó por lo que sea—, el móvil se quedaba vacío y la
+   * sesión guardada: a partir de ahí no se volvía a ofrecer NUNCA, y la única
+   * forma de recuperar dos años de entrenos era saber que existe un botón en
+   * Ajustes. Una copia que hay que adivinar no es una copia. */
+  if (nube.usuario() && !(await ID.hayDatosTuyos(db))) await ofrecerRestaurar();
+  if (tocaBienvenida) return abrirBienvenida();
+  atenderEnlace(enlaceDeEntrada);
+}
+
+/* --------------------------------------------------------------------------
+ * LA BIENVENIDA
+ * ------------------------------------------------------------------------ */
+
+function abrirBienvenida() {
+  BV.preparar({
+    esc,
+    icono,
+    aviso,
+    aplicarTema: (id, propio) => aplicarTema(id, propio, { suave: true }),
+    abrirCuenta: () => abrirCuenta(),
+    // Lo que ya sabemos de ti antes de empezar a preguntar. Si has entrado por
+    // la puerta, `trasEntrar()` ya ha bajado tu perfil de la nube.
+    nombreSabido: (() => {
+      const p = perfilActual();
+      return p.nombre || p.aliasVisible || p.alias || '';
+    })(),
+  });
+  BV.abrir({
+    alTerminar: async (hecho, elegido) => {
+      await recargar();
+      if (hecho && hecho.gimnasio) S.gimnasioId = hecho.gimnasio.id;
+      pintar();
+      // Y ahora lo que necesita la app entera montada: llevarse la rutina
+      // elegida (el importador casa las máquinas contra las que ya tienes) y
+      // apuntarse al gimnasio público.
+      const extra = await BV.despues(elegido, {
+        // Llega la FILA de la rutina publicada (con su id), no el paquete: la
+        // lista de populares no trae los datos dentro para no cargar ocho
+        // rutinas enteras solo para enseñar sus nombres. Se pide la elegida —y
+        // si es una de las ocho oficiales, `copiarRutina` la saca de dentro de
+        // la app cuando no hay red, así que la bienvenida no se queda a medias
+        // por estar en el metro.
+        importarPaquete: async (fila) => {
+          const gym = S.cache.gimnasios[0];
+          if (!fila || !gym) return false;   // sin gimnasio no hay dónde meter las máquinas
+          const r = await social.copiarRutina(fila.id);
+          const v = comp.validar(r.ok ? r.paquete : null);
+          if (!v.ok || v.paquete.tipo !== 'rutina') return false;
+          await comp.importarRutina(v.paquete, gym.id, {
+            maquinas: S.cache.maquinas, rutinas: S.cache.rutinas,
+          });
+          return true;
+        },
+      });
+      if (extra.rutina) await recargar();
+      pintar();
+      if (hecho && hecho.rutinas) {
+        aviso('Listo. Ahora añade las máquinas de tu gimnasio', 3200);
+      }
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * LO QUE VUELVE DEL CORREO
+ *
+ * Tres cosas distintas llegan por aquí y las tres necesitan una pantalla
+ * distinta. Antes no llegaba ninguna, porque el testigo se perdía en el `#`.
+ * ------------------------------------------------------------------------ */
+
+async function atenderVueltaDelCorreo(v) {
+  comp.limpiarHash();
+
+  if (v.que === 'error') {
+    // Lo normal aquí es el enlace caducado. Un «error» a secas deja a la
+    // persona sin saber qué hacer; lo que hace falta es el botón de reenviar.
+    return hojaReenviar(v.codigo === 'otp_expired'
+      ? 'Ese enlace ha caducado'
+      : 'Ese enlace ya no vale',
+      v.texto || 'Los enlaces de confirmación duran un rato por seguridad. Te mando otro.');
+  }
+
+  const r = await nube.entrarConTestigo(v);
+  if (!r.ok) return hojaReenviar('No pude entrar con ese enlace', r.motivo);
+
+  if (v.que === 'recovery') return hojaContrasenaNueva();
+
+  if (v.que === 'email_change') {
+    aviso('Correo cambiado', 3000);
+    pintar();
+    return;
+  }
+  // El testigo del correo da sesión, pero no dice quién eres ni baja tu perfil.
+  // Sin esto, confirmar la cuenta desde el correo dejaba la app dentro y con el
+  // perfil en blanco — el mismo «sale sin nombre» por otra puerta.
+  await trasEntrar();
+  // El enlace del correo lo abre el NAVEGADOR, no el APK: el dominio interno de
+  // la app no existe fuera del móvil, así que la vuelta cae siempre en la web.
+  // Decir «ya estás dentro» a secas es verdad aquí y mentira allí, y deja a
+  // quien lo lee sin saber qué hacer con la app que tiene abierta al lado.
+  hoja(
+    'Cuenta confirmada',
+    `<p class="campo-nota" style="margin-top:0">Listo: tu cuenta
+       <b>${esc((nube.usuario() || {}).email || '')}</b> ya está confirmada.</p>
+     <p class="campo-nota">Si has llegado aquí desde el correo y tienes la app
+       instalada en el móvil, <b>vuelve a la app y entra con tu correo y tu
+       contraseña</b>. Ahora ya te dejará.</p>
+     <button class="boton" data-cerrar>Entendido</button>`,
+    () => {}
+  );
+  pintar();
 }
 
 /**
@@ -4760,4 +11048,350 @@ async function mostrarDirecciones(raiz) {
     </div>
     <p class="nut-media">La IP la reparte el router y cambia sola. Si un día no
       conecta, dale a «Buscar el PC en la red».</p>`;
+}
+
+/* ==========================================================================
+ * LA PUERTA — la app empieza por saber quién eres
+ *
+ * Carlos, 1-sep-2026: *«la idea es que te fuerce a crear una cuenta, porque si
+ * no pierdes todo, y que si cierras sesión te mande a un inicio para entrar. Si
+ * ya tienes una cuenta, pues que entres y se vuelvan a meter todos tus datos.
+ * No tiene sentido que cuando cierres sesión no se te salga de la aplicación
+ * como para volver a iniciar sesión.»*
+ *
+ * DÓNDE ESTÁ EL LÍMITE DE «FORZAR», Y POR QUÉ HAY UNO
+ * ---------------------------------------------------
+ * Forzar la cuenta en una instalación nueva: sí, y es lo que hace esto. Pero
+ * hay dos casos donde exigirla convertiría la app en un ladrillo, y los dos
+ * pasan de verdad:
+ *
+ *   1. QUIEN YA TENÍA DATOS. Si alguien lleva meses apuntando desde antes de
+ *      que hubiera cuentas, plantarle una pantalla que no deja pasar es
+ *      quitarle SUS entrenos hasta que se registre. Se le pide la cuenta, se le
+ *      explica para qué, y se le deja seguir.
+ *   2. SIN COBERTURA. La primera regla del proyecto es que el dato nace en el
+ *      móvil porque en el gimnasio no hay red. Una puerta que necesita internet
+ *      para abrirse dejaría la app cerrada justo donde se usa. Con sesión ya
+ *      guardada no se pregunta nada; y si no la hay y tampoco hay red, se dice
+ *      y se deja entrar, que los datos son suyos.
+ * ========================================================================== */
+
+/** ¿Toca enseñar la puerta? Solo sin sesión. Con sesión, la app abre y ya. */
+async function hayQuePasarPorLaPuerta() {
+  if (nube.usuario()) return false;
+  if (!(await nube.hayNube())) return false;   // sin Supabase configurado no hay cuentas que pedir
+  return true;
+}
+
+/**
+ * La pantalla de entrada. Ocupa TODO: sin cabecera, sin barra de abajo y sin
+ * el mapa de vistas detrás. Que se vea que aquí no hay app todavía.
+ */
+async function abrirPuerta(alEntrar) {
+  const yaHabiaDatos = await ID.hayDatos(db);
+  const raiz = document.createElement('div');
+  raiz.className = 'puerta';
+  raiz.setAttribute('role', 'dialog');
+  raiz.setAttribute('aria-modal', 'true');
+  raiz.setAttribute('aria-label', 'Entrar en GYM');
+  raiz.innerHTML = `
+    <div class="puerta-cuerpo">
+      <div class="puerta-marca">${icono('pesa', 40)}<span>GYM</span></div>
+      <h2 class="puerta-titulo">Lo que levantas, apuntado</h2>
+      <p class="puerta-texto">Cada máquina se compara consigo misma, así que la app
+        sabe si estás subiendo de verdad o llevas dos meses con el mismo peso.</p>
+
+      <ul class="puerta-lista">
+        <li>${icono('nube', 18)}<span><b>Tu cuenta guarda tus entrenos.</b> Si cambias de
+          móvil o lo pierdes, entras y vuelven.</span></li>
+        <li>${icono('candado', 18)}<span><b>Solo los ves tú.</b> Series, peso y comida no
+          los puede leer nadie más — lo decide la base de datos, no la app.</span></li>
+        <li>${icono('gente', 18)}<span>Y sirve para lo de fuera: seguir a gente, compartir
+          rutinas y las clasificaciones de tu gimnasio.</span></li>
+      </ul>
+
+      <div class="puerta-acciones">
+        <button class="boton" id="pu-crear">Crear cuenta</button>
+        <button class="boton boton-2" id="pu-entrar">Ya tengo cuenta</button>
+        ${yaHabiaDatos
+          ? `<button class="boton-plano" id="pu-luego">Ahora no · seguir con mis datos</button>`
+          : `<button class="boton-plano oculto" id="pu-luego">Entrar sin cuenta</button>`}
+      </div>
+      <p class="puerta-nota" id="pu-nota" aria-live="polite">${yaHabiaDatos
+        ? 'Tus entrenos siguen aquí. La cuenta solo añade la copia y lo de compartir.'
+        : ''}</p>
+    </div>`;
+  document.body.appendChild(raiz);
+  document.body.classList.add('con-puerta');
+
+  const cerrar = () => {
+    raiz.remove();
+    document.body.classList.remove('con-puerta');
+  };
+  // Se guarda para que «entrar» desde dentro del formulario pueda cerrarla.
+  _cerrarPuerta = async () => {
+    cerrar();
+    if (alEntrar) await alEntrar();
+  };
+
+  $('#pu-crear', raiz).onclick = () => abrirCuenta({ modoInicial: 'registro' });
+  $('#pu-entrar', raiz).onclick = () => abrirCuenta({ modoInicial: 'entrar' });
+  const bLuego = $('#pu-luego', raiz);
+  bLuego.onclick = async () => {
+    cerrar();
+    if (alEntrar) await alEntrar();
+  };
+
+  // SIN RED NO SE PUEDE CREAR NINGUNA CUENTA, y la puerta tiene que decirlo en
+  // vez de dejar a alguien dándole a un botón que nunca va a contestar. Si
+  // además la base está vacía, se abre la salida: es preferible una app usable
+  // sin cuenta a una app que no abre.
+  if (!navigator.onLine) {
+    $('#pu-nota', raiz).textContent = 'Ahora mismo no hay conexión, así que no se puede '
+      + 'crear ni comprobar una cuenta. Puedes entrar y hacerlo luego desde Perfil.';
+    bLuego.classList.remove('oculto');
+    bLuego.textContent = 'Entrar sin conexión';
+  }
+}
+
+let _cerrarPuerta = null;
+
+/* --------------------------------------------------------------------------
+ * LO QUE PASA JUSTO DESPUÉS DE ENTRAR
+ *
+ * Aquí viven los tres síntomas que contó Carlos, resueltos de una vez:
+ *   · el perfil BAJA de la nube (por eso ya no sale sin nombre),
+ *   · los datos tienen DUEÑO (por eso entrar con otra cuenta no enseña los
+ *     ejercicios de la anterior),
+ *   · y si hay copia, se ofrece traerla (por eso «entras y vuelven tus datos»).
+ * ------------------------------------------------------------------------ */
+async function trasEntrar() {
+  const u = nube.usuario();
+  if (!u) return;
+
+  const que = await ID.decidir(db, u.id);
+  if (que === 'ajeno') {
+    const dueno = (await ID.aliasDelDueno(db)) || 'otra cuenta';
+    // NO SE BORRA NADA SOLO. Esta es la única operación de la app que se lleva
+    // por delante meses de entrenos, así que se pregunta, se dice de quién son
+    // y se dice qué pasa si dices que no.
+    const seguir = await preguntar(
+      `En este móvil hay datos de ${dueno}.\n\n`
+      + 'Si sigues, se BORRAN de aquí para dejar sitio a los tuyos. '
+      + `Lo que ${dueno} tenga en su copia de la nube no se toca: puede recuperarlo `
+      + 'entrando en su cuenta desde cualquier móvil.\n\n'
+      + '¿Empezar de cero con tu cuenta?');
+    if (!seguir) {
+      await nube.salir();
+      aviso('Sesión cerrada. Los datos se quedan como estaban', 3400);
+      return;
+    }
+    await ID.empezarDeCero(db, u.id, '');
+  }
+
+  // El perfil, de la nube al móvil. Esto es lo que arregla «te sale sin nombre
+  // y te hace volver a meterlo».
+  const r = await nube.miPerfil();
+  if (r.ok) {
+    const fundido = ID.fundirPerfil(await db.obtener('perfil', 'yo'), r.perfil);
+    await db.guardar('perfil', fundido);
+    await ID.marcarDueno(db, u.id, fundido.aliasVisible || fundido.alias || u.email);
+  } else {
+    await ID.marcarDueno(db, u.id, u.email);
+  }
+
+  await recargar();
+  // Y la copia vuelve. Sin preguntar si aquí no hay nada que pisar: para eso
+  // es la cuenta.
+  await ofrecerRestaurar();
+}
+
+/**
+ * LA COPIA VUELVE SOLA CUANDO NO HAY NADA QUE PISAR.  (3-sep-2026, 0.31.0)
+ *
+ * Carlos: *«vuelvo a iniciar sesión y me sale un menú superralo de Android
+ * feo… y entro y no hay absolutamente nada, todo lo de las máquinas y los pesos
+ * está a cero»*.
+ *
+ * Esto preguntaba SIEMPRE, con un `confirm()` de Android, y se ofrecía UNA vez.
+ * En un móvil recién instalado eso es lo peor de los dos mundos: la pregunta no
+ * protege nada —no hay nada que perder, la base está vacía— y en cambio un
+ * toque en el botón de la izquierda deja la app en cero sin volver a ofrecerlo.
+ * La cuenta existe justamente para que al reinstalar vuelvan tus datos; que eso
+ * dependa de acertar en un diálogo del sistema es no tener copia.
+ *
+ * Así que ahora:
+ *   · MÓVIL VACÍO → se trae sola, avisando. No hay nada que decidir.
+ *   · MÓVIL CON DATOS → se pregunta, porque ahí sí se juntan dos cosas y hay
+ *     que saber qué va a pasar. Y se pregunta DENTRO de la app.
+ *
+ * Con NÚMEROS delante en los dos casos: de cuándo es y cuánto trae.
+ */
+async function ofrecerRestaurar() {
+  const info = await nube.infoCopia();
+  if (!info.ok || !info.hay) return;
+  // OJO: `hayDatosTuyos`, no `hayDatos`. Los tres gimnasios que la app trae de
+  // fábrica no son de nadie, y con `hayDatos` un móvil recién instalado ya
+  // contaba como «aquí hay cosas» y se le preguntaba.
+  const mias = await ID.hayDatosTuyos(db);
+  const cuando = info.actualizado ? new Date(info.actualizado).toLocaleDateString('es-ES') : '';
+  const cuantas = Number(info.filas) || 0;
+
+  if (mias) {
+    const texto = `Tu cuenta tiene una copia${cuando ? ` del ${cuando}` : ''} con ${cuantas} apuntes.`
+      + '\n\nEn este móvil ya hay datos. Si la traes, se JUNTAN: de cada cosa se queda '
+      + 'la versión más nueva y no se pierde lo de hoy.'
+      + '\n\n¿La traigo?';
+    if (!await preguntar(texto, { si: 'Traerla', no: 'Ahora no' })) return;
+  } else {
+    aviso(`Trayendo tus ${cuantas} apuntes…`, 4000);
+  }
+
+  const c = await nube.bajarCopia();
+  if (!c.ok || !c.hay) {
+    return aviso(`No pude bajar tu copia: ${c.motivo || 'no había copia'}. `
+      + 'Está en Ajustes › Copia › Traer la copia', 5000);
+  }
+  const puesto = await db.restaurar(c.volcado, { modo: 'fusionar' });
+  if (!puesto.ok) {
+    return aviso(`No pude ponerla: ${puesto.motivo}. Vuelve a intentarlo en Ajustes`, 5000);
+  }
+  await recargar();
+  pintar();
+  aviso(`Listo: ${puesto.filas} apuntes recuperados`, 3600);
+}
+
+/* --------------------------------------------------------------------------
+ * LA COPIA, SOLA, SIN QUE HAYA QUE ACORDARSE
+ *
+ * Una copia que hay que pedir a mano es una copia que no existe el día que se
+ * rompe el móvil. Sube una vez cada 20 h, y solo con sesión y con red.
+ * ------------------------------------------------------------------------ */
+const CLAVE_MODO_PERSONAL = 'modo_personal';
+// El sonido va encendido de fábrica: es la mitad de lo que hace que abrir una
+// caja se sienta. Se apaga en Ajustes, y ahí se queda.
+const CLAVE_SONIDO = 'sonido';
+const CLAVE_ULTIMA_COPIA = 'copia_ultima';
+const CLAVE_COPIA_ACTIVA = 'copia_activa';
+
+async function copiaEncendida() {
+  const v = await db.ajuste(CLAVE_COPIA_ACTIVA, null);
+  return v === null ? true : !!v;   // encendida de fábrica: es para lo que se pide la cuenta
+}
+
+/** Sube la copia si toca. `forzar` para el botón de «Copiar ahora». */
+async function copiaAutomatica({ forzar = false } = {}) {
+  if (!nube.usuario()) return { ok: false, motivo: 'no has entrado en tu cuenta' };
+  if (!forzar && !(await copiaEncendida())) return { ok: false, motivo: 'la copia está apagada' };
+  if (!navigator.onLine) return { ok: false, motivo: 'no hay conexión' };
+  if (!forzar && !ID.tocaCopia(await db.ajuste(CLAVE_ULTIMA_COPIA, 0))) {
+    return { ok: false, motivo: 'ya hay una copia de hoy' };
+  }
+  /* UNA COPIA VACÍA NO PUEDE COMERSE UNA LLENA.  (3-sep-2026, 0.31.0)
+   *
+   * El camino que casi se lleva por delante los entrenos de Carlos: reinstalas,
+   * entras, y si la copia no vuelve —porque el diálogo se contestó que no, o
+   * porque en ese momento no había red— el móvil se queda vacío. Un segundo
+   * después arranca la copia automática, ve que nunca se ha copiado en este
+   * móvil, y SUBE ESE VACÍO encima de lo que sí había en la nube.
+   *
+   * Un móvil sin nada tuyo no tiene nada que guardar, así que subirlo solo
+   * puede hacer daño. Se dice y no se sube — ni siquiera a mano: el botón de
+   * «Copiar ahora» tampoco puede servir para borrar la copia sin querer. */
+  if (!(await ID.hayDatosTuyos(db))) {
+    return { ok: false, motivo: 'todavía no hay nada tuyo que copiar' };
+  }
+  const volcado = await db.volcar();
+  const cuenta = db.contarVolcado(volcado);
+  const r = await nube.subirCopia(volcado, { aparato: nombreDelAparato(), filas: cuenta.total });
+  if (r.ok) await db.ponAjuste(CLAVE_ULTIMA_COPIA, Date.now());
+  return { ...r, filas: cuenta.total };
+}
+
+/* --------------------------------------------------------------------------
+ * Y LA COPIA TAMBIÉN SALE CUANDO DEJAS LA APP.  (3-sep-2026, 0.31.0)
+ *
+ * Carlos, contando lo que hace: abre la app, da de alta un gimnasio con sus
+ * máquinas, y al rato desinstala para poner la versión nueva. Con la copia solo
+ * una vez cada 20 h, **todo eso no había subido a ninguna parte**: la copia de
+ * la nube seguía siendo la de ayer y lo de esta tarde se iba con la app.
+ *
+ * El momento en que dejas de mirar la pantalla es el último aviso que hay de
+ * que igual no vuelves. Ahí se sube, pero solo si hace falta: con sesión, con
+ * red, con la copia encendida, si HAY algo sin copiar y si no se acaba de
+ * copiar hace nada (subir el volcado entero cada vez que sales de la app sería
+ * gastarle los datos a Carlos por nada).
+ * ------------------------------------------------------------------------ */
+const ENTRE_COPIAS_AL_SALIR = 5 * 60 * 1000;
+
+/** ¿Hay algo apuntado después de la última copia? */
+async function hayCambiosSinCopiar() {
+  const ultima = Number(await db.ajuste(CLAVE_ULTIMA_COPIA, 0)) || 0;
+  if (!ultima) return true;                       // nunca se ha copiado nada
+  const cambios = await db.cambiosDesde(ultima);
+  return Object.values(cambios).some((f) => f && f.length);
+}
+
+async function copiaAlSalir() {
+  if (!nube.usuario() || !navigator.onLine) return;
+  if (!(await copiaEncendida())) return;
+  const ultima = Number(await db.ajuste(CLAVE_ULTIMA_COPIA, 0)) || 0;
+  if (ultima && Date.now() - ultima < ENTRE_COPIAS_AL_SALIR) return;
+  if (!(await hayCambiosSinCopiar())) return;
+  await copiaAutomatica({ forzar: true });
+}
+
+/** Un nombre corto del móvil, para poder decir «la copia es del otro». */
+function nombreDelAparato() {
+  const ua = String(navigator.userAgent || '');
+  const m = ua.match(/\(Linux; Android [^;]+; ([^)]+?)(?: Build|\))/);
+  if (m && m[1]) return m[1].trim().slice(0, 40);
+  if (/Android/.test(ua)) return 'Android';
+  if (/iPhone|iPad/.test(ua)) return 'iPhone';
+  return 'Navegador';
+}
+
+/**
+ * Cerrar sesión — y salir de verdad.
+ *
+ * Carlos: *«no tiene sentido que cuando cierres sesión no se te salga de la
+ * aplicación como para volver a iniciar sesión»*. Antes esto borraba el testigo
+ * y dejaba la app abierta con el perfil de la persona anterior en pantalla, que
+ * es exactamente lo que vio: cerró la sesión de su novia y seguía saliendo ella.
+ *
+ * Los datos NO se borran aquí. Se quedan con su dueño puesto, así que si vuelve
+ * a entrar la misma persona los encuentra tal cual, y si entra otra se le
+ * pregunta antes de tocar nada (`trasEntrar`).
+ */
+async function cerrarSesion() {
+  const copia = await db.ajuste(CLAVE_ULTIMA_COPIA, 0);
+  const sinCopia = !copia;
+  if (!await preguntar('¿Cerrar la sesión?\n\n'
+    + 'Vuelves a la pantalla de entrada. Lo que has apuntado se queda en este móvil'
+    + (sinCopia ? ', pero TODAVÍA NO HAY COPIA en la nube.' : ' y en tu copia de la nube.')
+    + '\n\nCuando vuelvas a entrar con esta cuenta, lo tendrás todo igual.')) return;
+
+  // Se intenta una última copia antes de salir: es el momento exacto en el que
+  // alguien deja de usar este móvil, y perder el último día por no haber
+  // esperado tres segundos sería tonto. Si no hay red, da igual y se sale.
+  if (await copiaEncendida()) await copiaAutomatica({ forzar: true });
+
+  // La última posición conocida es de quien la dio: quien entre después no la
+  // hereda.
+  geo.olvidarDonde();
+  await nube.salir();
+  cerrarHojas();
+  // Y LA APP DE DETRÁS DEJA DE ENSEÑAR A QUIEN SE HA IDO. Sin esto, debajo de
+  // la pantalla de entrada seguía dibujado el perfil de la persona anterior
+  // —con su nombre y sus iniciales—, y bastaba con darle a «Ahora no» para
+  // aterrizar otra vez en él. Es la misma queja de Carlos («cerré sesión y
+  // seguía saliendo Aria Elías») por la puerta de atrás.
+  S.vista = 'entrenar';
+  await recargar();
+  pintar();
+  aviso('Sesión cerrada');
+  await abrirPuerta(async () => {
+    await recargar();
+    pintar();
+  });
 }

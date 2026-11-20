@@ -112,8 +112,8 @@ footer a{color:var(--text)}
   <p class="lead">Desde julio de 2026 trabajo a diario con agentes de IA (Claude Code, sobre todo) en proyectos reales: una app de móvil, un asistente de voz, programas para una calculadora y toda mi carrera. Lo que enseño aquí no es solo el resultado: es la arquitectura que hemos ido diseñando para que la IA trabaje bien, cómo ha cambiado con los meses y qué errores la han ido moldeando.</p>
   <div class="stats">
     <div class="stat"><b>4</b><span>proyectos con IA en uso real</span></div>
-    <div class="stat"><b>160+</b><span>commits en los dos repos principales</span></div>
-    <div class="stat"><b>10</b><span>versiones de la app del gym en un mes</span></div>
+    <div class="stat"><b>260+</b><span>commits entre GYM, Jarvis y la carrera</span></div>
+    <div class="stat"><b>37</b><span>versiones de la app del gym en 6 semanas</span></div>
     <div class="stat"><b>51</b><span>notas de memoria del proyecto de la carrera</span></div>
     <div class="stat"><b>60+</b><span>errores apuntados con su causa raíz</span></div>
   </div>
@@ -147,7 +147,7 @@ footer a{color:var(--text)}
   <p class="sub">La arquitectura no se diseñó de golpe: cada pieza salió de un problema concreto.</p>
   <div class="tl">
     <div class="ev"><div class="when">JULIO 2026 · JARVIS</div><h3>Primer proyecto: probar todo a la vez</h3><p>Un asistente de voz con decenas de funciones. Aprendí lo básico a base de golpes: hotfixes casi diarios, versiones «Mark 14» a «Mark 24» en un mes. De aquí salen el <code>CHANGELOG</code> por versión y el registro de errores con causa raíz.</p></div>
-    <div class="ev"><div class="when">JULIO–AGOSTO · GYM</div><h3>Un proyecto con usuario real (yo)</h3><p>10 versiones en un mes, cada una a partir de mi propio feedback usándola en el gimnasio. Aparecen los tests de paridad, la regla de medir antes de decidir y la de revisar licencias antes de usar material de terceros.</p></div>
+    <div class="ev"><div class="when">JULIO–SEPTIEMBRE · GYM</div><h3>Un proyecto con usuario real (yo)</h3><p>37 versiones en seis semanas, cada una a partir de mi propio feedback usándola en el gimnasio; de app local a nube con cuentas. Aparecen los tests de paridad, la regla de medir antes de decidir y la de revisar licencias antes de usar material de terceros.</p></div>
     <div class="ev"><div class="when">SEPTIEMBRE · CARRERA</div><h3>La IA como profesor</h3><p>Empiezo el curso y monto el proyecto de la uni. Aparecen las skills (repasos, formularios, campus virtual) y las reglas de calidad de los documentos. Las skills largas se parten: reglas comunes en un solo sitio.</p></div>
     <div class="ev"><div class="when">OCTUBRE · HP PRIME</div><h3>Código que no puedo probar fácilmente</h3><p>Programas para una calculadora con su propio lenguaje. Nace el orden de verificación obligatorio (construir → linter → estrés → recorridos → emulador) y el fichero de lecciones que se lee antes de tocar nada.</p></div>
     <div class="ev"><div class="when">NOVIEMBRE · MATRIZ</div><h3>Ordenar todo lo aprendido</h3><p>Con varios proyectos vivos, lo común sube a una matriz con plantilla automática, arranque barato y cierre obligatorio. Auditoría de capacidades y límites, y recorte de contexto por proyecto.</p></div>
@@ -159,25 +159,28 @@ footer a{color:var(--text)}
   <p class="sub">Los repositorios son privados; aquí está qué es cada uno, en qué estado está y qué me ha enseñado.</p>
 
   <article class="proj">
-    <div class="proj-head"><h3>GYM · control de pesos y nutrición</h3><span class="pill warn">En pausa · v0.9.0</span></div>
-    <p class="what">App de móvil para apuntar qué peso levantas en cada máquina y en cada gimnasio, ver la progresión y detectar estancamientos. Nació de un problema mío: olvidaba cuánto levantaba y me estancaba sin saberlo. Funciona sin cobertura y sincroniza con el PC al llegar a casa; mi asistente de voz puede consultarla («¿en qué estoy estancado?»).</p>
-    <div><span class="tag">HTML/CSS/JS sin frameworks</span><span class="tag">IndexedDB</span><span class="tag">PWA + APK Android</span><span class="tag">Python + SQLite</span><span class="tag">Open Food Facts</span><span class="tag">Gemini (foto del plato)</span></div>
+    <div class="proj-head"><h3>GYM · entrenamiento, nutrición y comunidad</h3><span class="pill warn">En pausa · v0.37.1</span></div>
+    <p class="what">Empezó como una app para apuntar qué peso levantas en cada máquina y detectar estancamientos (olvidaba cuánto levantaba y me estancaba sin saberlo). En seis semanas pasó a ser una app completa: entrenamiento y planificador, nutrición con buscador de alimentos y código de barras, mapa de gimnasios, cuentas en la nube, enlaces para compartir por WhatsApp, medallas por materiales y un «vestuario» de personalización con animaciones. Funciona sin cobertura y se publica sola en la web con cada cambio.</p>
+    <div><span class="tag">HTML/CSS/JS sin frameworks</span><span class="tag">IndexedDB</span><span class="tag">PWA + APK Android</span><span class="tag">Supabase (cuentas, RLS)</span><span class="tag">Cloudflare Workers</span><span class="tag">OpenStreetMap</span><span class="tag">Open Food Facts</span><span class="tag">GitHub Actions (APK)</span></div>
     <div class="cols">
       <div><h4>Qué hemos mejorado</h4><ul>
-        <li><b>Local primero:</b> el dato nace en el móvil y el PC es un espejo con fusión <i>last-write-wins</i>.</li>
-        <li><b>Dejó de depender del PC</b> (v0.8): medí que Open Food Facts admite llamadas directas (200 OK en 236 ms); el rodeo por el servidor nunca había hecho falta.</li>
-        <li><b>Test de paridad</b> entre el JS del móvil y su gemelo en Python, para que el mismo producto salga en la misma posición con el PC encendido o apagado.</li>
-        <li><b>De 69 a 1.365 ejercicios</b> con un traductor propio de nombres al castellano de gimnasio, y una animación SVG propia con 30 patrones de movimiento.</li>
+        <li><b>37 versiones en 6 semanas</b> (27-jul → 7-sep), cada una a partir de lo que yo veía usándola en el gimnasio. 99 commits.</li>
+        <li><b>De PC de casa a la nube:</b> primero el dato vivía en el móvil y se copiaba al PC; después, cuentas en Supabase con políticas de seguridad por fila y la web en Cloudflare, gratis con repo privado.</li>
+        <li><b>El buscador de sitios, al servidor:</b> fallaba en silencio versión tras versión porque OpenStreetMap exige una cabecera que el navegador prohíbe mandar. Se movió a un Worker y se probó fuera de la app con 66 comprobaciones.</li>
+        <li><b>Actualizar sin perder datos</b> (v0.31): tres quejas mías eran una sola cadena: no actualizaba → había que desinstalar → al reinstalar se perdía todo.</li>
+        <li><b>De 69 a 1.365 ejercicios</b> con un traductor propio de nombres al castellano de gimnasio.</li>
       </ul></div>
       <div><h4>Qué he aprendido</h4><ul>
-        <li><b>Licencias:</b> en un dataset los datos eran MIT, pero los GIF tenían copyright de terceros. Se usaron los datos y se hizo la animación desde cero.</li>
-        <li><b>Seguridad:</b> una clave de API no puede ir dentro de un APK (se saca con un <code>unzip</code>); lo que la necesita pasa por el PC.</li>
-        <li><b>Rendimiento real:</b> pintar 1.365 tarjetas de golpe bloqueaba el móvil casi un segundo; ahora se pintan de 60 en 60.</li>
+        <li><b>«Deja de aplicar parches»:</b> cuando un fallo vuelve, hay que cambiar de enfoque y probarlo en un entorno controlado, no tocar la app otra vez.</li>
+        <li><b>Leer el diagnóstico antes de adivinar:</b> el repuesto del buscador llevaba seis versiones sin contestar nunca (un parámetro de idioma no admitido) y la app cortaba a los 8 s lo que el servidor tardaba 12.</li>
+        <li><b>El permiso no era el problema, era el origen:</b> la ubicación no funcionaba porque dentro del APK la página no se sirve desde un origen seguro.</li>
+        <li><b>Licencias y seguridad:</b> datos MIT sí, GIF con copyright no; ninguna clave secreta dentro de un APK.</li>
+        <li><b>Calidad visual:</b> las animaciones generadas en el móvil no daban la talla; se pasó a piezas prerenderizadas, a costa del peso de la app.</li>
       </ul></div>
     </div>
-    <p class="note"><b>Por qué está en pausa:</b> la última versión es de finales de agosto; al empezar el curso, la prioridad pasó al proyecto de la carrera. Pendiente: sacar la sincronización de la red de casa.</p>
-    <p style="margin-top:16px"><a class="btn" href="demo-gym/" target="_blank" rel="noopener">Abrir la app (demo web) →</a></p>
-    <p class="note">La demo corre entera en el navegador y empieza vacía. La sincronización con el PC y la foto del plato no funcionan aquí, porque necesitan el servidor de casa.</p>
+    <p class="note"><b>Por qué está en pausa:</b> la última versión es del 7 de septiembre; al empezar el curso, la prioridad pasó al proyecto de la carrera. Quedaba unir el rediseño del vestuario (en una rama aparte) con la versión principal y acabar la publicación en Google Play.</p>
+    <p style="margin-top:16px"><a class="btn" href="demo-gym/" target="_blank" rel="noopener">Abrir la app (v0.37.1) →</a></p>
+    <p class="note">La demo corre en el navegador y empieza vacía. Se puede crear una cuenta o usarla sin cuenta. Las animaciones grandes del vestuario tardan un poco en cargar la primera vez.</p>
   </article>
 
   <article class="proj">

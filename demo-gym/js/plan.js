@@ -49,6 +49,16 @@ export function planDe(rutina, maquinas) {
         maquinaId: p.maquinaId,
         series: sano(p.series, POR_DEFECTO.series),
         reps: sano(p.reps, POR_DEFECTO.reps),
+        // LO QUE VIENE CON LA RUTINA se conserva. Antes esto devolvía solo
+        // `{maquinaId, series, reps}` y todo lo demás se caía por el camino: la
+        // nota del autor y la tuya se habrían perdido en la primera pintada,
+        // sin error y sin que se notara hasta buscarlas.
+        //   `nota`    — la escribió quien hizo la rutina. No se toca jamás.
+        //   `notaMia` — la tuya. Va aparte para no pisarle la suya a nadie.
+        ...(p.nota ? { nota: p.nota } : {}),
+        ...(p.notaMia ? { notaMia: p.notaMia } : {}),
+        ...(p.video ? { video: p.video } : {}),
+        ...(p.foto ? { foto: p.foto } : {}),
       }));
   }
 
